@@ -1,4 +1,5 @@
 import type { Player, Track, TrackEndReason } from "lavalink-client";
+import { playbackRate } from "../shared/filters.js";
 import type { AudioFilter, LoopMode, PlayerSnapshot, QueueItem } from "../shared/types.js";
 import { UserError } from "./errors.js";
 import { applyFilter } from "./filters.js";
@@ -52,6 +53,15 @@ export class GuildPlayer {
    * "loadFailed" track end that follows then retries with that method, from where playback stopped (`fromMs`).
    */
   private pendingRetry: { method: ResolveMethod; fromMs: number } | null = null;
+
+  /**
+   * Lavalink reports the position in *real* time, not song time: under nightcore (1.21× speed) a 2:37 song
+   * ends while Lavalink says about 2:10. So the song position is worked out from the last moment both were
+   * known to agree (a track start, a seek, or an effect change):
+   *   song position = anchor.songMs + (Lavalink's position − anchor.lavalinkMs) × the effect's speed.
+   * See `songPositionMs()`.
+   */
+  private speedAnchor = { lavalinkMs: 0, songMs: 0 };
 
   constructor(
     readonly guildId: string,
@@ -193,8 +203,20 @@ export class GuildPlayer {
   async setFilter(filter: AudioFilter): Promise<void> {
     const player = this.lavalinkPlayer;
     if (!player) throw new UserError("Not connected to a voice channel.");
+
+    const songMs = this.songPositionMs(); // measured at the old speed, before switching
     await applyFilter(player, filter);
     this.filter = filter;
+
+    // Seeking to where the song is makes the new effect audible right away; otherwise Lavalink first plays
+    // the few seconds of audio it already prepared with the old effect. It also makes Lavalink's position
+    // equal the song position again, which the speed conversion counts from.
+    if (this.current && player.queue.current?.info.isSeekable) {
+      await player.seek(songMs);
+      this.speedAnchor = { lavalinkMs: songMs, songMs };
+    } else {
+      this.speedAnchor = { lavalinkMs: player.position, songMs };
+    }
     this.emitPlayerUpdate();
   }
 
@@ -291,7 +313,7 @@ export class GuildPlayer {
     const method = fallbackMethod(this.current.source, this.currentMethod);
     if (!method) return true;
 
-    this.pendingRetry = { method, fromMs: this.lavalinkPlayer?.position ?? 0 };
+    this.pendingRetry = { method, fromMs: this.songPositionMs() };
     console.warn(`[player] ${this.currentMethod} couldn't play "${this.current.title}"; retrying with ${method}`);
     return false;
   }
@@ -314,7 +336,7 @@ export class GuildPlayer {
       guildId: this.guildId,
       voiceChannelId: this.voiceChannelId,
       current: this.current,
-      positionMs: this.current ? (player?.position ?? 0) : 0,
+      positionMs: this.current ? this.songPositionMs() : 0,
       paused: player?.paused ?? false,
       volume: player?.volume ?? DEFAULT_VOLUME,
       loopMode: this.loopMode,
@@ -374,7 +396,16 @@ export class GuildPlayer {
     const player = this.lavalinkPlayer;
     if (!player) throw new UserError("Not connected to a voice channel.");
     // Lavalink stays paused across track changes; a new track should always be heard.
-    await player.play({ clientTrack: track, paused: false, position: startAtMs > 0 ? startAtMs : undefined });
+    // Always passing `position` (even 0) makes lavalink-client reset its position for the new track at once.
+    await player.play({ clientTrack: track, paused: false, position: startAtMs });
+    this.speedAnchor = { lavalinkMs: startAtMs, songMs: startAtMs };
+  }
+
+  /** Where the current song is, in song time (see `speedAnchor`), kept between 0 and its length. */
+  private songPositionMs(): number {
+    const lavalinkMs = this.lavalinkPlayer?.position ?? 0;
+    const songMs = this.speedAnchor.songMs + (lavalinkMs - this.speedAnchor.lavalinkMs) * playbackRate(this.filter);
+    return Math.max(0, Math.min(songMs, this.current?.durationMs ?? Infinity));
   }
 
   private setCurrent(item: QueueItem | null, method: ResolveMethod | null): void {
