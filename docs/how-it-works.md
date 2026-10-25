@@ -97,6 +97,29 @@ To add an effect: add its name to `AUDIO_FILTERS` in `src/shared/types.ts`, then
 
 Every change to a `GuildPlayer` goes through `player.run(() => ...)`. That waits for the previous change in that server to finish before starting the next one. Without it, a `/skip` arriving at the same moment a track ends by itself could advance the queue twice.
 
+## The website
+
+The website runs inside the bot's own process (`src/web/`), so it reads the same `PlayerManager` the slash commands use. `src/web/server.ts` puts three things on one port (`WEB_PORT`, default 3000):
+
+| Part | File | Job |
+|---|---|---|
+| REST API | `src/web/routes/guilds.ts` | `GET /api/guilds` (the server list) and `GET /api/guilds/:id/state` (a snapshot) |
+| Socket.IO | `src/web/socket.ts` | Pushes every change to the browsers watching that server |
+| The React app | `src/web/frontend.ts` | Serves `web/`: through Vite when running from source (`npm run dev`, instant reloads), or the built `web/dist/` with `npm start` |
+
+How the page stays live:
+
+1. The browser opens a Socket.IO connection and sends `guild:watch` with the server's id (`web/src/useGuildState.ts`).
+2. `socket.ts` puts that connection in the room `guild:<id>` and answers with `state`, a full `PlayerSnapshot`.
+3. From then on, every `PlayerManager` event for that server is forwarded to the room: `queue:update` (with a full snapshot) whenever the current track or the queue changes, and `player:update` (position, paused, volume, loop mode, filter) whenever those change and about once a second while playing.
+4. Between updates, `NowPlaying` keeps the progress bar moving by counting up from the last position.
+
+The message types are defined once in `src/shared/types.ts` (`ServerToClientEvents`, `ClientToServerEvents`), and both sides import them, so the TypeScript compiler catches it if the bot and the website disagree. The website imports shared code through `web/src/shared.ts`.
+
+Until login exists (milestone 5), the server listens on `127.0.0.1` only, and the page is read-only. Changes will go through new REST routes rather than the socket, so permissions are checked in one place.
+
+**To show something new on the page:** if the information is already in `PlayerSnapshot`, just use it in a component in `web/src/components/`. If not, add it to `PlayerSnapshot` in `src/shared/types.ts`, fill it in `GuildPlayer.snapshot()` (and `PlayerManager.getState()` for servers with no player yet), and the compiler will point at anything else that needs updating.
+
 ## Errors
 
 - Throw **`UserError`** (from `src/player/errors.ts`) when the message is meant for the user, e.g. `throw new UserError("Join a voice channel first.")`. The command handler shows that message as the reply.

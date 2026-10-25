@@ -1,0 +1,315 @@
+/* Colors follow the system's light/dark setting. */
+:root {
+  --bg: #f2f3f5;
+  --card: #ffffff;
+  --text: #1e1f22;
+  --muted: #5c5e66;
+  --border: #e1e2e5;
+  --accent: #5865f2;
+  --warning-bg: #fff4d6;
+  --error-bg: #fde2e2;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1e1f22;
+    --card: #2b2d31;
+    --text: #f2f3f5;
+    --muted: #a5a8b0;
+    --border: #3a3c42;
+    --accent: #7983f5;
+    --warning-bg: #4a3e17;
+    --error-bg: #4d2224;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.4;
+}
+
+a {
+  color: inherit;
+}
+
+img {
+  display: block;
+  object-fit: cover;
+}
+
+.page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+select {
+  font: inherit;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+}
+
+main {
+  display: grid;
+  gap: 16px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.card h3 {
+  margin: 0 0 12px;
+  font-size: 1rem;
+}
+
+.empty {
+  text-align: center;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.banner {
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin: 0 0 16px;
+}
+
+.banner.warning {
+  background: var(--warning-bg);
+}
+
+.banner.error {
+  background: var(--error-bg);
+}
+
+.placeholder {
+  display: grid;
+  place-items: center;
+  background: var(--border);
+  color: var(--muted);
+}
+
+/* ---- Now playing ---- */
+
+.now-playing {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.now-playing.empty {
+  display: block;
+}
+
+.artwork {
+  width: 160px;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  flex-shrink: 0;
+  font-size: 2rem;
+}
+
+.details {
+  flex: 1;
+  min-width: 0; /* lets long titles wrap instead of widening the card */
+}
+
+.label {
+  margin: 0;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.now-playing .title {
+  margin: 4px 0;
+  font-size: 1.15rem;
+  overflow-wrap: anywhere;
+}
+
+.now-playing .muted {
+  margin: 0;
+}
+
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.5s linear;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+}
+
+.badges li {
+  font-size: 0.8rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+/* ---- Queue ---- */
+
+.queue {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.queue li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+
+.queue li:first-child {
+  border-top: none;
+}
+
+.queue .position {
+  width: 1.5em;
+  text-align: right;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.queue img,
+.queue .thumb {
+  width: 64px;
+  aspect-ratio: 16 / 9;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.queue .info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.queue .title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue .info .muted {
+  font-size: 0.85rem;
+}
+
+.queue .duration {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Server picker ---- */
+
+.guilds {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.guilds button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.guilds button:hover {
+  border-color: var(--accent);
+}
+
+.guilds img,
+.guilds .icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+}
+
+footer {
+  margin-top: 24px;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+/* Phones: stack the artwork above the details. */
+@media (max-width: 520px) {
+  .now-playing {
+    flex-direction: column;
+  }
+
+  .artwork {
+    width: 100%;
+  }
+}

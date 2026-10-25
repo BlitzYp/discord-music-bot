@@ -45,3 +45,37 @@ export interface PlayerSnapshot {
   filter: AudioFilter;
   queue: QueueItem[];
 }
+
+/** The part of a snapshot that changes without the queue changing. Sent about once a second while playing. */
+export type PlayerStatus = Pick<PlayerSnapshot, "positionMs" | "paused" | "volume" | "loopMode" | "filter">;
+
+// -------------------------------------------------------------------------------------------------
+// Web API and Socket.IO
+// -------------------------------------------------------------------------------------------------
+
+/** A server shown in the website's server list (GET /api/guilds). */
+export interface GuildSummary {
+  id: string;
+  name: string;
+  iconUrl: string | null;
+}
+
+/** Messages the server pushes to the browser. Changes go over REST; sockets only push updates. */
+export interface ServerToClientEvents {
+  /** The full state, sent right after the browser joins a server's room. */
+  state: (state: PlayerSnapshot) => void;
+  /** The current track or the queue changed. */
+  "queue:update": (state: PlayerSnapshot) => void;
+  /** Position, pause, volume, loop mode or filter changed. */
+  "player:update": (status: PlayerStatus) => void;
+  "track:start": (item: QueueItem) => void;
+  "track:end": (item: QueueItem, reason: string) => void;
+  /** A short, user-readable playback error. */
+  error: (message: string) => void;
+}
+
+/** Messages the browser sends to the server. */
+export interface ClientToServerEvents {
+  /** Start receiving updates for a server (and stop receiving them for the previous one). */
+  "guild:watch": (guildId: string) => void;
+}

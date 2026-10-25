@@ -10,13 +10,13 @@ import { fetchMetadata, parseInput } from "./resolvers/index.js";
 const LEAVE_WHEN_EMPTY_AFTER_MS = 60_000;
 
 /**
- * Events PlayerManager emits whenever something changes. Today the bot listens to "error";
- * the website will forward all of them to the browser over Socket.IO.
+ * Events PlayerManager emits whenever something changes. The bot posts "error" in Discord;
+ * src/web/socket.ts forwards all of them to the browser over Socket.IO.
  */
 export interface PlayerManagerEvents {
   /** The current track or the queue changed. */
   "queue:update": [guildId: string, state: PlayerSnapshot];
-  /** Paused/resumed, volume, loop mode or filter changed. */
+  /** Paused/resumed, volume, loop mode or filter changed; also sent about once a second while playing. */
   "player:update": [guildId: string, state: PlayerSnapshot];
   "track:start": [guildId: string, item: QueueItem];
   "track:end": [guildId: string, item: QueueItem, reason: string];
@@ -204,6 +204,13 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
       if (!player) return;
 
       player.run(() => player.onTrackEnded(payload.reason)).catch((error) => this.emit("error", guildId, null, error));
+    });
+
+    // Lavalink reports the playback position about once a second (`playerUpdateInterval` in application.yml).
+    // Passing it on keeps the website's progress bar in sync.
+    this.lavalink.on("playerUpdate", (_oldState, lavalinkPlayer) => {
+      const player = this.players.get(lavalinkPlayer.guildId);
+      if (player?.current) this.emit("player:update", lavalinkPlayer.guildId, player.snapshot());
     });
 
     this.lavalink.on("trackStuck", (lavalinkPlayer) => {

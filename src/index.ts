@@ -7,8 +7,9 @@ import { registerVoiceStateUpdate } from "./bot/events/voiceStateUpdate.js";
 import { createLavalink } from "./player/lavalink.js";
 import { PlayerManager } from "./player/PlayerManager.js";
 import { clearDownloads, updateYtDlp } from "./player/resolvers/ytdlp.js";
+import { startWebServer } from "./web/server.js";
 
-// Startup order: config → (db, later) → Lavalink → bot → (web, later)
+// Startup order: config → (db, later) → Lavalink → bot → web
 await clearDownloads();
 // YouTube changes often break old yt-dlp versions. Updating runs in the background so startup isn't delayed.
 // Becomes the owner's "yt-dlp auto-update" setting in milestone 6.
@@ -40,3 +41,7 @@ process.once("SIGINT", () => void shutdown());
 process.once("SIGTERM", () => void shutdown());
 
 await client.login(config.DISCORD_TOKEN);
+// The bot keeps working in Discord even if the website can't start (e.g. the port is taken).
+await startWebServer({ client, players }, config.WEB_PORT).catch((error) =>
+  console.error("[web] the website couldn't start:", error instanceof Error ? error.message : error),
+);

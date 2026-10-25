@@ -2,7 +2,7 @@
 
 A self-hosted Discord bot that plays music in voice channels. Audio is played by [Lavalink](https://lavalink.dev), a separate Java server that runs next to the bot on the same machine.
 
-**Status:** milestone 3 of 8 (see the milestones in [AGENTS.md](AGENTS.md)). Slash commands only; the website comes later.
+**Status:** milestone 4 of 8 (see the milestones in [AGENTS.md](AGENTS.md)). Control playback with slash commands; the website shows what's playing, live.
 
 - [How it works](docs/how-it-works.md): a tour of the code, and how to add a command
 - [Design](docs/design.md): the full design and the decisions behind it
@@ -86,13 +86,19 @@ npm run dev
 
 `dev` restarts the bot whenever you save a file. When you see `logged in as ...` and `node "main" connected`, join a voice channel and run `/play` with a YouTube link.
 
+### The website
+
+While the bot runs, open **http://localhost:3000** (or whatever `WEB_PORT` is). It shows the current song, a progress bar, and the queue, and updates live as things change in Discord. With more than one server, pick one at the top.
+
+For now it's read-only and only reachable from your own computer, because there's no login yet (milestone 5). With `npm run dev`, edits to `web/` show up in the browser immediately.
+
 Other scripts:
 
 | Script | What it does |
 |---|---|
-| `npm run typecheck` | Checks the TypeScript for errors without running anything |
-| `npm run build` | Compiles to `dist/` |
-| `npm start` | Runs the compiled bot from `dist/` (use this instead of `dev` for day-to-day hosting) |
+| `npm run typecheck` | Checks the TypeScript (bot and website) for errors without running anything |
+| `npm run build` | Compiles the bot to `dist/` and the website to `web/dist/` |
+| `npm start` | Runs the compiled build (use this instead of `dev` for day-to-day hosting; run `npm run build` first) |
 
 ## Troubleshooting
 
@@ -104,13 +110,15 @@ Other scripts:
 - **"yt-dlp isn't installed"**: run `npm run setup:ytdlp`.
 - **Some songs take ~10 seconds to start**: those are being downloaded with yt-dlp because Lavalink couldn't load them. The console shows `[resolver] lavalink couldn't load ...` or `[player] lavalink couldn't play ...` with the reason.
 - **An error starting with "yt-dlp:"**: yt-dlp couldn't get the song either; its message usually says why (private video, region-locked, removed). If YouTube songs that should work fail this way, restart the bot so it updates yt-dlp.
+- **The website doesn't load**: check the bot's console. `[web] website running at ...` means it's up; `[web] the website couldn't start` says why (often another program already uses port 3000; change `WEB_PORT` in `.env`). The Discord side keeps working either way.
+- **"The website hasn't been built yet"** with `npm start`: run `npm run build` first.
 - Lavalink's own logs are in `lavalink/logs/`. Downloaded songs are kept in `data/ytdlp-cache/` (the 20 most recent) and deleted when the bot starts.
 
 ## Project layout
 
 ```
 src/
-  index.ts              Starts everything: config → Lavalink → Discord bot
+  index.ts              Starts everything: config → Lavalink → Discord bot → website
   config.ts             Reads and checks .env
   bot/
     client.ts           The discord.js client
@@ -122,8 +130,18 @@ src/
     GuildPlayer.ts      One server's current track and queue
     lavalink.ts         Connection to the Lavalink server
     resolvers/          Turns a link into a track Lavalink can play (through Lavalink, or a yt-dlp download)
+    filters.ts          Audio effects for /filter
     errors.ts           UserError: errors whose message is shown to users
-  shared/types.ts       Types shared with the future website
+  web/
+    server.ts           Starts the website: REST API, Socket.IO and the React app on one port
+    routes/             REST API routes (under /api)
+    socket.ts           Pushes PlayerManager's events to browsers
+    frontend.ts         Serves the React app (Vite in development, web/dist in production)
+  shared/               Types and helpers used by both the bot and the website
+web/                    The React website (Vite)
+  src/App.tsx           The page: server picker, now playing, queue
+  src/components/       NowPlaying, QueueList, GuildPicker
+  src/useGuildState.ts  Live state from the bot over Socket.IO
 lavalink/
   application.yml       Lavalink settings (sources, YouTube plugin)
 scripts/                Helpers for downloading Lavalink and yt-dlp, and starting Lavalink

@@ -151,9 +151,9 @@ Possibly needed later:
 - Restored items are re-resolved when they play, as usual, so expired URLs don't matter.
 - Nice to have: `lavalink-client` session resuming, so a restart of just the bot process doesn't interrupt audio at all while Lavalink keeps running.
 
-## Real-time (Socket.IO, milestone 4)
-- After the server checks membership, the client joins the room `guild:<id>`.
-- Server → client: `state` (full snapshot on join), `queue:update`, `track:start`, `track:end`, `player:update` (position, paused, volume; about once per second while playing), `error`. `PlayerManager` already emits the first four under these names.
+## Real-time (Socket.IO, built in milestone 4)
+- The client sends `guild:watch <id>` and joins the room `guild:<id>`. From milestone 5, the server first checks that the logged-in user is a member of that server.
+- Server → client: `state` (full snapshot on join), `queue:update`, `track:start`, `track:end`, `player:update` (position, paused, volume, loop mode, filter; about once per second while playing), `error`. The types live in `src/shared/types.ts`.
 - **Changes go over REST; sockets only push updates.** This keeps authorization and validation in one place.
 - The website shows when Lavalink is down. `lavalink-client` reconnects by itself, but playback fails until it does.
 
