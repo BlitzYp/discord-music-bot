@@ -8,6 +8,22 @@ interface Props {
   snapshot: PlayerSnapshot;
 }
 
+const ICON_PATHS = {
+  resume: "M8 5v14l11-7z",
+  pause: "M6 5h4v14H6zm8 0h4v14h-4z",
+  skip: "M5 5v14l10-7zm12 0h2v14h-2z",
+  stop: "M6 6h12v12H6z",
+  volume: "M3 9v6h4l5 5V4L7 9H3zm13 3a5 5 0 0 0-2-4v8a5 5 0 0 0 2-4z",
+};
+
+function PlaybackIcon({ name }: { name: keyof typeof ICON_PATHS }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
+      <path d={ICON_PATHS[name]} />
+    </svg>
+  );
+}
+
 /** Pause/resume, skip, stop, loop mode and volume. Only shown to DJs. */
 export function PlayerControls({ guildId, snapshot }: Props) {
   const { run, pending, error } = useAction();
@@ -22,23 +38,24 @@ export function PlayerControls({ guildId, snapshot }: Props) {
 
   return (
     <div className="controls">
-      <div className="buttons">
+      <div className="buttons transport-controls">
         {snapshot.paused ? (
-          <button type="button" disabled={!playing || pending} onClick={() => run(() => api.resume(guildId))}>
-            ▶ Resume
+          <button type="button" className="primary" disabled={!playing || pending} onClick={() => run(() => api.resume(guildId))}>
+            <PlaybackIcon name="resume" /> Resume
           </button>
         ) : (
-          <button type="button" disabled={!playing || pending} onClick={() => run(() => api.pause(guildId))}>
-            ⏸ Pause
+          <button type="button" className="primary" disabled={!playing || pending} onClick={() => run(() => api.pause(guildId))}>
+            <PlaybackIcon name="pause" /> Pause
           </button>
         )}
         <button type="button" disabled={!playing || pending} onClick={() => run(() => api.skip(guildId))}>
-          ⏭ Skip
+          <PlaybackIcon name="skip" /> Skip
         </button>
         <button type="button" disabled={!active || pending} onClick={stop}>
-          ⏹ Stop
+          <PlaybackIcon name="stop" /> Stop
         </button>
-
+      </div>
+      <div className="playback-options">
         <label className="loop">
           Loop
           <select
@@ -46,9 +63,9 @@ export function PlayerControls({ guildId, snapshot }: Props) {
             disabled={!active || pending}
             onChange={(event) => run(() => api.setLoopMode(guildId, event.target.value as LoopMode))}
           >
-            <option value="off">off</option>
-            <option value="track">this track</option>
-            <option value="queue">the queue</option>
+            <option value="off">Off</option>
+            <option value="track">Track</option>
+            <option value="queue">Queue</option>
           </select>
         </label>
 
@@ -76,7 +93,8 @@ function VolumeSlider(props: { volume: number; disabled: boolean; onChange: (vol
 
   return (
     <label className="volume">
-      🔊
+      <PlaybackIcon name="volume" />
+      <span className="visually-hidden">Volume</span>
       <input
         type="range"
         className="slider"

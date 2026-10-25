@@ -4,6 +4,7 @@ import { describeAddMany, formatDuration, isYoutubePlaylistLink, type PlaylistDe
 import { useAction } from "../useAction";
 import { useDragReorder } from "../useDragReorder";
 import { SongTitle } from "./SongTitle";
+import { TrackArtwork } from "./TrackArtwork";
 
 interface Props {
   guildId: string;
@@ -83,10 +84,10 @@ export function PlaylistView({ guildId, playlistId, userId, canControl, queuedSo
         {canControl && (
           <span className="row-actions">
             <button type="button" className="small" disabled={pending} onClick={rename}>
-              ✏️ Rename
+              Rename
             </button>
             <button type="button" className="small" disabled={pending} onClick={remove}>
-              🗑 Delete
+              Delete
             </button>
           </span>
         )}
@@ -94,11 +95,11 @@ export function PlaylistView({ guildId, playlistId, userId, canControl, queuedSo
 
       {canControl && (
         <div className="playlist-actions">
-          <button type="button" disabled={pending || songs.length === 0} onClick={() => play("replace")}>
-            ▶ Play
+          <button type="button" className="primary" disabled={pending || songs.length === 0} onClick={() => play("replace")}>
+            Play
           </button>
           <button type="button" disabled={pending || songs.length === 0} onClick={() => play("append")}>
-            ➕ Add to queue
+            Add to queue
           </button>
           <span className="muted hint">Play replaces the queue. The bot joins your voice channel if it isn't in one.</span>
         </div>
@@ -118,7 +119,7 @@ export function PlaylistView({ guildId, playlistId, userId, canControl, queuedSo
             return (
               <li key={song.id} {...rowProps(song, index)}>
                 <span className="position">{position}</span>
-                {song.thumbnail ? <img src={song.thumbnail} alt="" draggable={false} /> : <span className="thumb placeholder">♪</span>}
+                <TrackArtwork className="thumb" src={song.thumbnail} />
                 <span className="info">
                   <SongTitle className="title" title={song.title} source={song.source} />
                   <span className="muted">

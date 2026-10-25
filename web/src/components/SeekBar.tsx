@@ -44,7 +44,7 @@ export function SeekBar({ positionMs, durationMs, isStream, canSeek, onSeek }: P
           onKeyUp={commit}
         />
       ) : (
-        <div className="bar" role="progressbar" aria-valuenow={Math.round(percent)}>
+        <div className="bar" role="progressbar" aria-label="Song progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)}>
           <div className="fill" style={{ width: `${percent}%` }} />
         </div>
       )}

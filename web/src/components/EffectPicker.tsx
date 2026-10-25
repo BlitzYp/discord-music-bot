@@ -18,11 +18,10 @@ export function EffectPicker({ guildId, active, canControl, inVoice }: Props) {
   const disabled = !canControl || !inVoice || pending;
 
   return (
-    <section className="card">
-      <h3>
-        Effects{" "}
-        <span className="muted">· {active === "off" ? "none" : `${active}: ${FILTER_DESCRIPTIONS[active].toLowerCase()}`}</span>
-      </h3>
+    <details className="audio-effects">
+      <summary>
+        Audio effects <span className={active === "off" ? "muted" : "effect-status"}>{active === "off" ? "Off" : active}</span>
+      </summary>
       <div className="effects">
         {AUDIO_FILTERS.map((filter) => (
           <button
@@ -44,6 +43,6 @@ export function EffectPicker({ guildId, active, canControl, inVoice }: Props) {
       {canControl && !inVoice && <p className="muted hint">Effects can be changed while the bot is in a voice channel.</p>}
       {!canControl && <p className="muted hint">Only DJs can change the effect.</p>}
       {error && <p className="hint error-text">{error}</p>}
-    </section>
+    </details>
   );
 }

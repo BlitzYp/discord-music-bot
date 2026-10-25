@@ -2,11 +2,12 @@ import * as api from "../api";
 import { formatDuration, type QueueItem } from "../shared";
 import { useAction } from "../useAction";
 import { SongTitle } from "./SongTitle";
+import { TrackArtwork } from "./TrackArtwork";
 
 interface Props {
   guildId: string;
   history: QueueItem[];
-  /** Whether the user is a DJ (shows "Play again" and Clear). */
+  /** Whether the user is a DJ (shows the add-to-queue action and Clear). */
   canControl: boolean;
 }
 
@@ -20,22 +21,22 @@ export function HistoryList({ guildId, history, canControl }: Props) {
   }
 
   return (
-    <section className="card">
-      <h3 className="with-action">
-        <span>Recently played</span>
+    <section className="history-section" aria-label="Recently played">
+      <div className="section-heading">
+        <h3>Recently played</h3>
         {canControl && (
           <button type="button" className="small" disabled={pending} onClick={clear}>
-            🗑 Clear
+            Clear
           </button>
         )}
-      </h3>
+      </div>
       <ol className="queue history">
         {history.map((item) => {
           // Re-adding works by link, the same as pasting it into "Add a song". (Library files come in milestone 8.)
           const link = item.source.kind === "file" ? null : item.source.url;
           return (
             <li key={item.id}>
-              {item.thumbnail ? <img src={item.thumbnail} alt="" /> : <span className="thumb placeholder">♪</span>}
+              <TrackArtwork className="thumb" src={item.thumbnail} />
               <span className="info">
                 <SongTitle className="title" title={item.title} source={item.source} />
                 <span className="muted">
@@ -46,8 +47,16 @@ export function HistoryList({ guildId, history, canControl }: Props) {
               <span className="duration">{formatDuration(item.durationMs, item.isStream)}</span>
               {canControl && link && (
                 <span className="row-actions">
-                  <button type="button" className="small" disabled={pending} onClick={() => run(() => api.addToQueue(guildId, link))}>
-                    ↺ Play again
+                  <button
+                    type="button"
+                    title="Add to queue"
+                    aria-label={`Add ${item.title} to queue`}
+                    disabled={pending}
+                    onClick={() => run(() => api.addToQueue(guildId, link))}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true" focusable="false">
+                      <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+                    </svg>
                   </button>
                 </span>
               )}

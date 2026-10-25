@@ -115,6 +115,8 @@ The website runs inside the bot's own process (`src/web/`), so it reads the same
 | Socket.IO | `src/web/socket.ts` | Pushes every change to the browsers watching that server |
 | The React app | `src/web/frontend.ts` | Serves `web/`: through Vite when running from source (`npm run dev`, instant reloads), or the built `web/dist/` with `npm start` |
 
+**Page layout.** `web/src/App.tsx` puts the full-width `NowPlaying` section first on the Player tab. Its artwork and title lead, followed by progress, playback controls and a collapsible `EffectPicker`; the summary shows the active effect even when closed. `QueueList` accepts the DJ-only `AddSong` form as a child, placing it under the **Up next** heading and outside the scrolling song list. That list can be focused and scrolled with the keyboard. The queue and `HistoryList` share a `player-lists` grid: side by side on wide screens, stacked on smaller screens. The **+** history action adds a song to the queue again. `TrackArtwork` is shared by the player, queue, history and playlist view; it keeps a music-note fallback if an image fails and loads list artwork lazily. Styling in `web/src/styles.css` follows the system's light/dark theme with neutral surfaces, underlined navigation, visible keyboard focus and row actions that wrap below song details on phones.
+
 How the page stays live:
 
 1. The browser opens a Socket.IO connection and sends `guild:watch` with the server's id (`web/src/useGuildState.ts`).

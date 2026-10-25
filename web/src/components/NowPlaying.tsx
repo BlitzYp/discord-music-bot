@@ -1,9 +1,11 @@
 import * as api from "../api";
 import { type PlayerSnapshot, playbackRate } from "../shared";
 import { useNow } from "../useNow";
+import { EffectPicker } from "./EffectPicker";
 import { PlayerControls } from "./PlayerControls";
 import { SeekBar } from "./SeekBar";
 import { SongTitle } from "./SongTitle";
+import { TrackArtwork } from "./TrackArtwork";
 
 interface Props {
   guildId: string;
@@ -21,59 +23,66 @@ export function NowPlaying({ guildId, snapshot, receivedAt, canControl }: Props)
 
   if (!item) {
     return (
-      <section className="card now-playing empty">
-        <p>Nothing is playing.</p>
-        <p className="muted">{canControl ? "Add a link above, or use /play in Discord." : "Use /play in Discord to start some music."}</p>
+      <section className="card now-playing" aria-label="Now playing">
+        <div className="empty-player">
+          <p className="label">Now playing</p>
+          <h2>Nothing playing yet</h2>
+          <p className="muted">{canControl ? "Add a song below or choose a saved playlist." : "A DJ can add a song to start the music."}</p>
+        </div>
+        <EffectPicker guildId={guildId} active={snapshot.filter} canControl={canControl} inVoice={snapshot.voiceChannelId !== null} />
       </section>
     );
   }
 
   // The bot sends the position about once a second; in between, count up from the last value.
   // Nightcore and vaporwave play the song faster or slower, so the bar has to move faster or slower too.
-  // `now` ticks once a second, so right after an update it can be a moment older than `receivedAt`: never go below 0.
+  // The local clock can tick just before a new snapshot arrives: never count backwards from that update.
   const elapsedSinceUpdate = snapshot.paused ? 0 : Math.max(0, now - receivedAt) * playbackRate(snapshot.filter);
   const position = Math.min(snapshot.positionMs + elapsedSinceUpdate, item.durationMs ?? Infinity);
 
   return (
-    <section className="card now-playing">
+    <section className="card now-playing" aria-label="Now playing">
       <div className="track">
-        {item.thumbnail ? <img className="artwork" src={item.thumbnail} alt="" /> : <div className="artwork placeholder">♪</div>}
+        <TrackArtwork className="artwork" src={item.thumbnail} />
 
         <div className="details">
-          <p className="label">{snapshot.interrupted ? "Stopped by a restart" : snapshot.paused ? "Paused" : "Now playing"}</p>
+          <div className="now-playing-heading">
+            <p className="label">Now playing</p>
+            <span className="playback-state" data-playing={!snapshot.paused && !snapshot.interrupted}>
+              {snapshot.interrupted ? "Paused after restart" : snapshot.paused ? "Paused" : "Playing"}
+            </span>
+          </div>
           <h2 className="title">
             <SongTitle title={item.title} source={item.source} />
           </h2>
-          <p className="muted">
-            {item.author ? `${item.author} · ` : ""}requested by {item.requestedBy.name}
-          </p>
+          {item.author && <p className="track-author">{item.author}</p>}
+          <p className="muted requested-by">Requested by {item.requestedBy.name}</p>
 
-          <SeekBar
-            positionMs={position}
-            durationMs={item.durationMs}
-            isStream={item.isStream}
-            canSeek={canControl && !item.isStream && !snapshot.interrupted}
-            onSeek={async (positionMs) => {
-              await api.seek(guildId, positionMs).catch(() => {}); // a failed seek just snaps back
-            }}
-          />
-
-          {snapshot.interrupted && (
-            <p className="hint">
-              The bot restarted while this was playing. {canControl ? "Press Resume" : "A DJ can use /resume"} to continue from
-              here (the bot joins {canControl ? "your" : "their"} voice channel).
-            </p>
+          {!canControl && (
+            <ul className="player-meta">
+              <li>Volume {snapshot.volume}%</li>
+              {snapshot.loopMode !== "off" && <li>Looping {snapshot.loopMode}</li>}
+            </ul>
           )}
-
-          <ul className="badges">
-            <li>Volume {snapshot.volume}%</li>
-            {snapshot.loopMode !== "off" && <li>Looping {snapshot.loopMode}</li>}
-            {snapshot.filter !== "off" && <li className="effect">Effect: {snapshot.filter}</li>}
-          </ul>
         </div>
       </div>
 
+      <SeekBar
+        positionMs={position}
+        durationMs={item.durationMs}
+        isStream={item.isStream}
+        canSeek={canControl && !item.isStream && !snapshot.interrupted}
+        onSeek={async (positionMs) => {
+          await api.seek(guildId, positionMs).catch(() => {}); // a failed seek just snaps back
+        }}
+      />
       {canControl && <PlayerControls guildId={guildId} snapshot={snapshot} />}
+      {snapshot.interrupted && (
+        <p className="muted hint player-notice">
+          {canControl ? "Resume to continue from here. Join a voice channel in Discord first." : "A DJ can resume this song in Discord."}
+        </p>
+      )}
+      <EffectPicker guildId={guildId} active={snapshot.filter} canControl={canControl} inVoice={snapshot.voiceChannelId !== null} />
     </section>
   );
 }

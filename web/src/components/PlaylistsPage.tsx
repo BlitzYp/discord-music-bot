@@ -172,7 +172,7 @@ function NewPlaylistForm({ guildId, queuedSongs, onCreated }: NewPlaylistFormPro
       </p>
       <p className="hint">
         <button type="button" className="small" disabled={pending || queuedSongs === 0} onClick={saveQueue}>
-          💾 Save the queue as a playlist
+          Save the queue as a playlist
         </button>
       </p>
       {error && <p className="hint error-text">{error}</p>}

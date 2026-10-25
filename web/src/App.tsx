@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import * as api from "./api";
 import { AddSong } from "./components/AddSong";
 import { AdminPanel } from "./components/AdminPanel";
-import { EffectPicker } from "./components/EffectPicker";
 import { GuildPicker } from "./components/GuildPicker";
 import { GuildSettingsForm } from "./components/GuildSettingsForm";
 import { HistoryList } from "./components/HistoryList";
@@ -79,7 +78,12 @@ export function App() {
     <div className="page">
       <header>
         <h1>
-          <button type="button" className="link" onClick={() => navigate(guildId, "player")}>
+          <button type="button" className="link brand" onClick={() => navigate(guildId, "player")}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true" focusable="false">
+              <path d="M9 17V6l11-2v11M9 9l11-2" strokeLinecap="round" strokeLinejoin="round" />
+              <ellipse cx="6" cy="17" rx="3" ry="2.5" />
+              <ellipse cx="17" cy="15" rx="3" ry="2.5" />
+            </svg>
             Music Bot
           </button>
         </h1>
@@ -95,7 +99,7 @@ export function App() {
               </button>
             )}
             <img src={user.avatarUrl} alt="" />
-            {user.name}
+            <span className="account-name">{user.name}</span>
             <button type="button" className="small" onClick={logout}>
               Log out
             </button>
@@ -104,6 +108,7 @@ export function App() {
       </header>
 
       {loadError && <p className="banner error">Couldn't reach the bot: {loadError}</p>}
+      {user === undefined && !loadError && <p className="muted" role="status">Loading your account…</p>}
       {user === null && <LoginScreen />}
       {user && showAdmin && <AdminPanel />}
       {user && !showAdmin && (
@@ -162,30 +167,37 @@ function Dashboard({ user, guildId, view, onNavigate }: DashboardProps) {
 
   return (
     <>
-      {guilds && guilds.length > 1 && (
-        <select className="server-select" value={guildId ?? ""} onChange={(event) => onNavigate(event.target.value || null, view)}>
-          <option value="">Choose a server…</option>
-          {guilds.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.name}
-            </option>
-          ))}
-        </select>
-      )}
-      {guilds?.length === 1 && guild && <p className="muted server-name">{guild.name}</p>}
+      {guilds && guilds.length > 0 && (
+        <div className="server-toolbar">
+          {guilds.length > 1 ? (
+            <select
+              className="server-select"
+              aria-label="Server"
+              value={guildId ?? ""}
+              onChange={(event) => onNavigate(event.target.value || null, view)}
+            >
+              <option value="">Choose a server…</option>
+              {guilds.map((g) => (
+                <option key={g.id} value={g.id}>{g.name}</option>
+              ))}
+            </select>
+          ) : guild && <p className="server-name">{guild.name}</p>}
 
-      {guild && (
-        <nav className="tabs">
-          <TabButton view="player" label="Player" shownView={shownView} onPick={(v) => onNavigate(guild.id, v)} />
-          <TabButton view="playlists" label="Playlists" shownView={shownView} onPick={(v) => onNavigate(guild.id, v)} />
-          {isAdmin && <TabButton view="settings" label="Settings" shownView={shownView} onPick={(v) => onNavigate(guild.id, v)} />}
-        </nav>
+          {guild && (
+            <nav className="tabs" aria-label="Server pages">
+              <TabButton view="player" label="Player" shownView={shownView} onPick={(v) => onNavigate(guild.id, v)} />
+              <TabButton view="playlists" label="Playlists" shownView={shownView} onPick={(v) => onNavigate(guild.id, v)} />
+              {isAdmin && <TabButton view="settings" label="Settings" shownView={shownView} onPick={(v) => onNavigate(guild.id, v)} />}
+            </nav>
+          )}
+        </div>
       )}
 
       {!connected && <p className="banner warning">Lost the connection to the bot. Reconnecting…</p>}
       {error && <p className="banner error">{error}</p>}
       {loadError && <p className="banner error">Couldn't load your servers: {loadError}</p>}
 
+      {!guilds && !loadError && <p className="muted" role="status">Loading your servers…</p>}
       {guilds && !guildId && <GuildPicker guilds={guilds} onPick={(id) => onNavigate(id, "player")} />}
       {shownView === "settings" && guildId && <GuildSettingsForm guildId={guildId} />}
       {shownView === "playlists" && guildId && (
@@ -193,20 +205,17 @@ function Dashboard({ user, guildId, view, onNavigate }: DashboardProps) {
       )}
       {shownView === "player" && guildId && !snapshot && connected && <p className="muted">Loading…</p>}
       {shownView === "player" && snapshot && guildId && (
-        <main>
-          {guild && !canControl && (
-            <p className="muted hint member-hint">You can watch, but only DJs can control playback. A server admin picks the DJ role.</p>
-          )}
-          {canControl && <AddSong guildId={guildId} />}
+        <main className="player-page">
           <NowPlaying guildId={guildId} snapshot={snapshot} receivedAt={receivedAt} canControl={canControl} />
-          <EffectPicker
-            guildId={guildId}
-            active={snapshot.filter}
-            canControl={canControl}
-            inVoice={snapshot.voiceChannelId !== null}
-          />
-          <QueueList guildId={guildId} queue={snapshot.queue} canControl={canControl} />
-          <HistoryList guildId={guildId} history={snapshot.history} canControl={canControl} />
+          {guild && !canControl && (
+            <p className="muted hint member-hint">Only DJs can control playback. A server admin can choose the DJ role in Settings.</p>
+          )}
+          <div className="player-lists">
+            <QueueList guildId={guildId} queue={snapshot.queue} canControl={canControl}>
+              {canControl && <AddSong guildId={guildId} />}
+            </QueueList>
+            <HistoryList guildId={guildId} history={snapshot.history} canControl={canControl} />
+          </div>
         </main>
       )}
     </>
@@ -222,7 +231,12 @@ interface TabButtonProps {
 
 function TabButton({ view, label, shownView, onPick }: TabButtonProps) {
   return (
-    <button type="button" className={view === shownView ? "active" : ""} onClick={() => onPick(view)}>
+    <button
+      type="button"
+      className={view === shownView ? "active" : ""}
+      aria-current={view === shownView ? "page" : undefined}
+      onClick={() => onPick(view)}
+    >
       {label}
     </button>
   );

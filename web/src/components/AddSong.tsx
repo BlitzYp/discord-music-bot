@@ -1,10 +1,11 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useId, useState } from "react";
 import * as api from "../api";
 import { isYoutubePlaylistLink } from "../shared";
 import { useAction } from "../useAction";
 
 /** "Add a song": paste a link, the same as /play in Discord. Only shown to DJs. */
 export function AddSong({ guildId }: { guildId: string }) {
+  const linkId = useId();
   const [link, setLink] = useState("");
   /** For a link from a YouTube playlist: queue every song of the playlist instead of just this one. */
   const [wholePlaylist, setWholePlaylist] = useState(false);
@@ -23,18 +24,19 @@ export function AddSong({ guildId }: { guildId: string }) {
   }
 
   return (
-    <section className="card">
+    <div className="queue-add-song">
+      <label className="visually-hidden" htmlFor={linkId}>Add a song</label>
       <form className="add-song" onSubmit={submit}>
         <input
+          id={linkId}
           type="url"
-          placeholder="Paste a YouTube, SoundCloud or other link…"
-          aria-label="Link to add"
+          placeholder="Paste a song or playlist link…"
           value={link}
           onChange={(event) => setLink(event.target.value)}
           disabled={pending}
         />
-        <button type="submit" disabled={pending || !link.trim()}>
-          {pending ? "Adding…" : "Add"}
+        <button type="submit" className="primary" disabled={pending || !link.trim()}>
+          {pending ? "Adding…" : "Add to queue"}
         </button>
       </form>
       {isPlaylistLink && (
@@ -49,9 +51,9 @@ export function AddSong({ guildId }: { guildId: string }) {
         </label>
       )}
       <p className="muted hint">
-        {pending ? "Loading the link (can take ~10 seconds if yt-dlp has to download it)…" : "If the bot isn't in voice yet, it joins the channel you're in."}
+        {pending ? "Loading the song. This can take a few seconds…" : "Join a voice channel in Discord to start playing."}
       </p>
       {error && <p className="hint error-text">{error}</p>}
-    </section>
+    </div>
   );
 }
