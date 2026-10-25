@@ -1,16 +1,23 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import type { LavalinkManager } from "lavalink-client";
-import type { PlayerSnapshot, QueueItem, Requester } from "../shared/types.js";
+import type { LoopMode, PlayerSnapshot, QueueItem, Requester } from "../shared/types.js";
+import { UserError } from "./errors.js";
 import { GuildPlayer } from "./GuildPlayer.js";
 import { fetchMetadata, parseInput } from "./resolvers/index.js";
+
+/** How long the bot stays in a voice channel with no listeners before leaving. Becomes `leaveWhenEmptyAfterSec` in milestone 6. */
+const LEAVE_WHEN_EMPTY_AFTER_MS = 60_000;
 
 /**
  * Events PlayerManager emits whenever something changes. Today the bot listens to "error";
  * the website will forward all of them to the browser over Socket.IO.
  */
 export interface PlayerManagerEvents {
+  /** The current track or the queue changed. */
   "queue:update": [guildId: string, state: PlayerSnapshot];
+  /** Paused/resumed, volume or loop mode changed. */
+  "player:update": [guildId: string, state: PlayerSnapshot];
   "track:start": [guildId: string, item: QueueItem];
   "track:end": [guildId: string, item: QueueItem, reason: string];
   error: [guildId: string, item: QueueItem | null, error: unknown];
@@ -35,6 +42,8 @@ export interface PlayRequest {
 export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
   /** One GuildPlayer per server, created the first time someone plays something there. */
   private readonly players = new Map<string, GuildPlayer>();
+  /** Servers where the bot is alone in voice, and the timer that will make it leave. */
+  private readonly leaveTimers = new Map<string, NodeJS.Timeout>();
 
   constructor(readonly lavalink: LavalinkManager) {
     super();
@@ -76,11 +85,85 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
     return true;
   }
 
+  async pause(guildId: string): Promise<void> {
+    const player = this.requirePlayer(guildId);
+    await player.run(() => player.pause());
+  }
+
+  async resume(guildId: string): Promise<void> {
+    const player = this.requirePlayer(guildId);
+    await player.run(() => player.resume());
+  }
+
+  async setVolume(guildId: string, volume: number): Promise<void> {
+    const player = this.requirePlayer(guildId);
+    await player.run(() => player.setVolume(volume));
+  }
+
+  async setLoopMode(guildId: string, mode: LoopMode): Promise<void> {
+    const player = this.requirePlayer(guildId);
+    await player.run(async () => player.setLoopMode(mode));
+  }
+
+  /** Removes a queued item by its id. Returns the removed item. */
+  async remove(guildId: string, itemId: string): Promise<QueueItem> {
+    const player = this.requirePlayer(guildId);
+    return player.run(async () => player.remove(itemId));
+  }
+
+  /** Moves a queued item to a new position (1 = next). Returns the moved item. */
+  async move(guildId: string, itemId: string, toPosition: number): Promise<QueueItem> {
+    const player = this.requirePlayer(guildId);
+    return player.run(async () => player.move(itemId, toPosition));
+  }
+
+  async shuffle(guildId: string): Promise<void> {
+    const player = this.requirePlayer(guildId);
+    await player.run(async () => player.shuffle());
+  }
+
   /** What's playing and queued in a server right now. */
   getState(guildId: string): PlayerSnapshot {
     const player = this.players.get(guildId);
     if (player) return player.snapshot();
-    return { guildId, voiceChannelId: null, current: null, positionMs: 0, paused: false, queue: [] };
+    return {
+      guildId,
+      voiceChannelId: null,
+      current: null,
+      positionMs: 0,
+      paused: false,
+      volume: 100,
+      loopMode: "off",
+      queue: [],
+    };
+  }
+
+  /**
+   * Tells the manager how many people (not counting bots) are in the bot's voice channel.
+   * The bot calls this whenever someone joins, leaves or moves. With nobody left, the bot waits
+   * LEAVE_WHEN_EMPTY_AFTER_MS and then stops and leaves, unless someone comes back first.
+   */
+  updateListenerCount(guildId: string, listeners: number): void {
+    const pendingLeave = this.leaveTimers.get(guildId);
+
+    if (listeners > 0) {
+      if (pendingLeave) this.cancelLeaveTimer(guildId);
+      return;
+    }
+
+    const isInVoice = this.players.get(guildId)?.voiceChannelId;
+    if (pendingLeave || !isInVoice) return;
+
+    const timer = setTimeout(() => {
+      this.leaveTimers.delete(guildId);
+      this.stop(guildId).catch((error) => this.emit("error", guildId, null, error));
+    }, LEAVE_WHEN_EMPTY_AFTER_MS);
+    this.leaveTimers.set(guildId, timer);
+  }
+
+  private cancelLeaveTimer(guildId: string): void {
+    clearTimeout(this.leaveTimers.get(guildId));
+    this.leaveTimers.delete(guildId);
   }
 
   private getOrCreatePlayer(guildId: string): GuildPlayer {
@@ -89,6 +172,13 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
       player = new GuildPlayer(guildId, this);
       this.players.set(guildId, player);
     }
+    return player;
+  }
+
+  /** The server's player, for actions that only make sense once the bot has played something there. */
+  private requirePlayer(guildId: string): GuildPlayer {
+    const player = this.players.get(guildId);
+    if (!player) throw new UserError("Nothing is playing.");
     return player;
   }
 
@@ -123,8 +213,10 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
       this.emit("error", guildId, item, new Error(reason ?? `Track failed: ${track?.info.title ?? "unknown"}`));
     });
 
-    // The Lavalink player is gone (e.g. someone disconnected the bot from voice), so its queue is too.
+    // The Lavalink player is gone (/stop, the bot left an empty channel, or someone disconnected it),
+    // so its queue is too.
     this.lavalink.on("playerDestroy", (lavalinkPlayer) => {
+      this.cancelLeaveTimer(lavalinkPlayer.guildId);
       this.players.get(lavalinkPlayer.guildId)?.reset();
     });
   }

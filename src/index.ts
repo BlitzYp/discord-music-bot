@@ -3,6 +3,7 @@ import { createClient } from "./bot/client.js";
 import { registerInteractionCreate } from "./bot/events/interactionCreate.js";
 import { registerPlayerEvents } from "./bot/events/playerEvents.js";
 import { registerReady } from "./bot/events/ready.js";
+import { registerVoiceStateUpdate } from "./bot/events/voiceStateUpdate.js";
 import { createLavalink } from "./player/lavalink.js";
 import { PlayerManager } from "./player/PlayerManager.js";
 
@@ -17,6 +18,7 @@ client.on("raw", (packet) => void lavalink.sendRawData(packet));
 registerReady(client, lavalink, config);
 registerInteractionCreate(client, { players });
 registerPlayerEvents(client, players);
+registerVoiceStateUpdate(client, players);
 
 process.on("unhandledRejection", (error) => console.error("[process] unhandled rejection:", error));
 

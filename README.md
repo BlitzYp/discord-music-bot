@@ -2,7 +2,7 @@
 
 A self-hosted Discord bot that plays music in voice channels. Audio is played by [Lavalink](https://lavalink.dev), a separate Java server that runs next to the bot on the same machine.
 
-**Status:** milestone 1 of 8 (see the milestones in [AGENTS.md](AGENTS.md)). Slash commands only; the website comes later.
+**Status:** milestone 2 of 8 (see the milestones in [AGENTS.md](AGENTS.md)). Slash commands only; the website comes later.
 
 - [How it works](docs/how-it-works.md): a tour of the code, and how to add a command
 - [Design](docs/design.md): the full design and the decisions behind it
@@ -13,9 +13,17 @@ A self-hosted Discord bot that plays music in voice channels. Audio is played by
 | Command | What it does |
 |---|---|
 | `/play <link>` | Joins your voice channel and plays the link, or adds it to the queue if something is already playing |
+| `/pause` / `/resume` | Pauses or resumes the current track |
 | `/skip` | Skips to the next track |
 | `/stop` | Stops playback, clears the queue and leaves the voice channel |
-| `/queue` | Shows the current track and what's coming up |
+| `/queue` | Shows the current track, what's coming up, the volume and the loop mode |
+| `/remove <position>` | Removes a track from the queue (positions are the numbers in `/queue`) |
+| `/move <from> <to>` | Moves a track to a different place in the queue (`to: 1` plays it next) |
+| `/shuffle` | Shuffles the queue; the current track keeps playing |
+| `/loop off\|track\|queue` | Repeats nothing, the current track, or the whole queue |
+| `/volume [percent]` | Shows or sets the volume, 0–150% (100 is normal). Resets to 100% when the bot leaves. |
+
+The bot leaves the voice channel by itself, clearing the queue, after being alone in it for 60 seconds.
 
 Supported links: YouTube, Bandcamp, Twitch, Vimeo and direct audio file URLs. SoundCloud is currently broken in Lavalink 4.2.2 (see [Troubleshooting](#troubleshooting)). Searching by song name isn't supported yet.
 

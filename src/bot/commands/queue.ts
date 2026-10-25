@@ -23,14 +23,18 @@ export const queue: Command = {
       if (state.current.thumbnail) embed.setThumbnail(state.current.thumbnail);
     }
 
+    const footer = [`Volume ${state.volume}%`];
+    if (state.loopMode !== "off") footer.push(`Looping ${state.loopMode}`);
+
     if (state.queue.length > 0) {
       const lines = state.queue.slice(0, SHOWN).map((item, i) => `**${i + 1}.** ${formatItem(item)} · ${item.requestedBy.name}`);
       if (state.queue.length > SHOWN) lines.push(`…and ${state.queue.length - SHOWN} more`);
       embed.addFields({ name: "Up next", value: lines.join("\n").slice(0, 1024) });
 
       const totalMs = state.queue.reduce((sum, item) => sum + (item.durationMs ?? 0), 0);
-      embed.setFooter({ text: `${state.queue.length} in queue · ${formatDuration(totalMs)} total` });
+      footer.unshift(`${state.queue.length} in queue · ${formatDuration(totalMs)} total`);
     }
+    embed.setFooter({ text: footer.join(" · ") });
 
     await interaction.reply({ embeds: [embed] });
   },

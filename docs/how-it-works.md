@@ -41,10 +41,16 @@ The rule that holds it together: **commands (and later the website) only call `P
 
 Lavalink tells the bot when a track ends, and why. `PlayerManager.listenToLavalink()` passes that on to `GuildPlayer.onTrackEnded(reason)`:
 
-- `finished` or `loadFailed`: play the next item in the queue.
+- `finished`: the track played to the end. The loop mode decides what's next:
+  - `off`: play the next item; the finished one is dropped.
+  - `track`: play the same item again.
+  - `queue`: put the finished item at the end of the queue, then play the next one.
+- `loadFailed`: Lavalink couldn't play it. Play the next item. A broken item is never looped, so one bad link can't fail over and over.
 - `stopped`, `replaced` or `cleanup`: the bot caused it itself (`/stop`, `/skip` and so on), so do nothing.
 
 `playNext()` takes the next item off the queue and **loads its link again** right before playing it (see below). If that fails, it reports the error in the channel and tries the item after it. When the queue is empty the bot goes quiet but stays in the voice channel.
+
+`/skip` drops the current item, or, in `queue` loop mode, moves it to the end of the queue. Every new track starts unpaused, because Lavalink would otherwise stay paused across a skip.
 
 ### Why load the link again right before playing?
 
@@ -53,6 +59,14 @@ The queue stores what the user typed (the link), not a ready-to-play track. Some
 ### Why does GuildPlayer keep its own queue?
 
 `lavalink-client` has a queue built in, but it stores resolved tracks, which is exactly what the previous section avoids. So the bot keeps its own queue and turns the library's automatic skipping off (`autoSkip: false` in `player/lavalink.ts`). A side effect: because the library's queue is always empty, it reports every track end as `queueEnd` instead of `trackEnd`. That's why `PlayerManager` listens to `queueEnd`.
+
+### Queue positions and item ids
+
+Users see queue positions: the numbers in `/queue`, where 1 is the next track. `PlayerManager` identifies items by their `id` instead (`remove(guildId, itemId)`, `move(guildId, itemId, toPosition)`), because a position can change between the moment someone reads the queue and the moment they act on it. The website will send ids. Slash commands translate a position into an id with `itemAtPosition()` in `src/bot/commands/positions.ts`.
+
+### Leaving an empty channel
+
+`bot/events/voiceStateUpdate.ts` watches people joining and leaving voice channels. Whenever the bot's channel changes, it counts the people in it (bots don't count) and calls `players.updateListenerCount()`. When the count hits 0, `PlayerManager` starts a 60-second timer (`LEAVE_WHEN_EMPTY_AFTER_MS`). If someone joins in time, the timer is cancelled; otherwise the bot does a normal `/stop`. In milestone 6 the delay becomes the per-server `leaveWhenEmptyAfterSec` setting.
 
 ### `run()`: one change at a time
 

@@ -2,7 +2,7 @@
 
 A self-hosted Discord bot that plays audio in voice channels, controlled by slash commands and (later) a web dashboard. TypeScript + discord.js v14; audio is played by Lavalink v4, a separate Java server on the same machine. Runs on the owner's Windows PC for their own and friends' servers.
 
-**Status:** milestone 1 works: the owner played YouTube through `/play` in Discord on 2026-10-25. YouTube playback needs the unreleased plugin build pinned in `lavalink/application.yml` (its comments explain why). Known issue: Lavalink 4.2.2's SoundCloud source fails on every track; YouTube and direct links work.
+**Status:** milestone 1 works: the owner played YouTube through `/play` in Discord on 2026-10-25. Milestone 2 is written and its queue logic passes a fake-Lavalink test, but it hasn't been tested in Discord yet. YouTube playback needs the unreleased plugin build pinned in `lavalink/application.yml` (its comments explain why). Known issue: Lavalink 4.2.2's SoundCloud source fails on every track; YouTube and direct links work.
 
 ## Where to look
 
@@ -15,7 +15,7 @@ A self-hosted Discord bot that plays audio in voice channels, controlled by slas
 Build them in order. Each milestone works end to end in Discord before the next one starts.
 
 1. **Skeleton:** config, Lavalink running, bot online; `/play <url>` through the Lavalink YouTube plugin; `/skip`, `/stop`, `/queue`. *(working)*
-2. **Player features:** pause/resume, remove/move, loop, shuffle, volume, leave automatically when the channel is empty.
+2. **Player features:** pause/resume, remove/move, loop, shuffle, volume, leave automatically when the channel is empty. *(written)*
 3. **YouTube resolver modes:** yt-dlp resolver and `auto` fallback (mode hardcoded for now).
 4. **Read-only web view:** Express + Socket.IO + React page showing the current track and the queue live (localhost, no auth yet).
 5. **Auth + web controls:** Discord OAuth, server list, permission checks, adding links, skip, reorder and remove from the website.

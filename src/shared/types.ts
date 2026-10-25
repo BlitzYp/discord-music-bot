@@ -22,11 +22,21 @@ export interface QueueItem {
   requestedBy: Requester;
 }
 
+/**
+ * What happens when a track finishes:
+ * - "off": move on to the next item.
+ * - "track": play the same item again.
+ * - "queue": move the item to the end of the queue, so the whole queue repeats.
+ */
+export type LoopMode = "off" | "track" | "queue";
+
 export interface PlayerSnapshot {
   guildId: string;
   voiceChannelId: string | null;
   current: QueueItem | null;
   positionMs: number;
   paused: boolean;
+  volume: number;
+  loopMode: LoopMode;
   queue: QueueItem[];
 }

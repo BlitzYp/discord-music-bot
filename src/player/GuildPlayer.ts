@@ -1,8 +1,12 @@
 import type { Player, Track, TrackEndReason } from "lavalink-client";
-import type { PlayerSnapshot, QueueItem } from "../shared/types.js";
+import type { LoopMode, PlayerSnapshot, QueueItem } from "../shared/types.js";
 import { UserError } from "./errors.js";
 import type { PlayerManager } from "./PlayerManager.js";
 import { resolvePlayable } from "./resolvers/index.js";
+
+/** Volume for a newly joined player, in percent. Becomes the per-server `defaultVolume` setting in milestone 6. */
+const DEFAULT_VOLUME = 100;
+export const MAX_VOLUME = 150;
 
 /**
  * The playback state of one Discord server: what's playing now and what's queued after it.
@@ -11,6 +15,8 @@ import { resolvePlayable } from "./resolvers/index.js";
  * original link (not a resolved track) and resolves it only right before it plays. The Lavalink player
  * is just told "play this one track now".
  *
+ * Queue positions are 1-based, as shown in /queue: position 1 is the next item to play.
+ *
  * Don't call the methods below directly; go through PlayerManager, which wraps them in `run()`.
  */
 export class GuildPlayer {
@@ -18,6 +24,7 @@ export class GuildPlayer {
   current: QueueItem | null = null;
   /** Items waiting to play, in order. Does not include `current`. */
   queue: QueueItem[] = [];
+  loopMode: LoopMode = "off";
 
   /** The tail of the task queue used by `run()`. */
   private lastTask: Promise<unknown> = Promise.resolve();
@@ -57,6 +64,10 @@ export class GuildPlayer {
     return result;
   }
 
+  // ---------------------------------------------------------------------------------------------
+  // Joining voice and adding to the queue
+  // ---------------------------------------------------------------------------------------------
+
   /** Joins the given voice channel if the bot isn't connected yet. If it already is, it stays where it is. */
   async ensureConnected(voiceChannelId: string | null, textChannelId: string | null): Promise<Player> {
     const existing = this.lavalinkPlayer;
@@ -71,7 +82,7 @@ export class GuildPlayer {
         voiceChannelId,
         textChannelId: textChannelId ?? undefined,
         selfDeaf: true,
-        volume: 100,
+        volume: DEFAULT_VOLUME,
       });
     await player.connect();
     return player;
@@ -105,12 +116,20 @@ export class GuildPlayer {
     return { position: 0 };
   }
 
-  /** Skips the current track. Returns the skipped item, or null if nothing was playing. */
+  // ---------------------------------------------------------------------------------------------
+  // Playback controls
+  // ---------------------------------------------------------------------------------------------
+
+  /**
+   * Skips the current track. Returns the skipped item, or null if nothing was playing.
+   * In "queue" loop mode the skipped item goes to the end of the queue; otherwise it's dropped.
+   */
   async skip(): Promise<QueueItem | null> {
     const skipped = this.current;
     if (!skipped) return null;
 
     this.manager.emit("track:end", this.guildId, skipped, "skipped");
+    if (this.loopMode === "queue") this.queue.push(skipped);
     await this.playNext();
     return skipped;
   }
@@ -118,15 +137,85 @@ export class GuildPlayer {
   /** Clears the queue, stops playback and leaves the voice channel. */
   async stop(): Promise<void> {
     this.reset();
-    await this.lavalinkPlayer?.destroy("stopped by user");
+    await this.lavalinkPlayer?.destroy("stopped");
   }
+
+  async pause(): Promise<void> {
+    const player = this.requirePlaying();
+    if (player.paused) throw new UserError("Already paused.");
+    await player.pause();
+    this.emitPlayerUpdate();
+  }
+
+  async resume(): Promise<void> {
+    const player = this.requirePlaying();
+    if (!player.paused) throw new UserError("Not paused.");
+    await player.resume();
+    this.emitPlayerUpdate();
+  }
+
+  /** Sets the volume in percent (0 to MAX_VOLUME). Applies until the bot leaves voice. */
+  async setVolume(volume: number): Promise<void> {
+    if (!Number.isInteger(volume) || volume < 0 || volume > MAX_VOLUME) {
+      throw new UserError(`Volume must be a whole number from 0 to ${MAX_VOLUME}.`);
+    }
+    const player = this.lavalinkPlayer;
+    if (!player) throw new UserError("Not connected to a voice channel.");
+    await player.setVolume(volume);
+    this.emitPlayerUpdate();
+  }
+
+  setLoopMode(mode: LoopMode): void {
+    this.loopMode = mode;
+    this.emitPlayerUpdate();
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Editing the queue
+  // ---------------------------------------------------------------------------------------------
+
+  /** Removes a queued item. Returns the removed item. */
+  remove(itemId: string): QueueItem {
+    const index = this.findQueueIndex(itemId);
+    const [removed] = this.queue.splice(index, 1);
+    this.emitQueueUpdate();
+    return removed!;
+  }
+
+  /** Moves a queued item to a new position (1 = next). Returns the moved item. */
+  move(itemId: string, toPosition: number): QueueItem {
+    if (!Number.isInteger(toPosition) || toPosition < 1 || toPosition > this.queue.length) {
+      throw new UserError(`The new position must be from 1 to ${this.queue.length}.`);
+    }
+    const index = this.findQueueIndex(itemId);
+    const [item] = this.queue.splice(index, 1);
+    this.queue.splice(toPosition - 1, 0, item!);
+    this.emitQueueUpdate();
+    return item!;
+  }
+
+  /** Shuffles the queue into a random order. The current track keeps playing. */
+  shuffle(): void {
+    if (this.queue.length < 2) throw new UserError("There's nothing to shuffle.");
+    // Fisher-Yates: walk backwards, swapping each item with a random one at or before it.
+    for (let i = this.queue.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [this.queue[i], this.queue[j]] = [this.queue[j]!, this.queue[i]!];
+    }
+    this.emitQueueUpdate();
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Reacting to Lavalink events (called by PlayerManager)
+  // ---------------------------------------------------------------------------------------------
 
   /**
    * Called when Lavalink reports that the current track ended. Lavalink's end reasons:
-   * - "finished": it played to the end → play the next one.
+   * - "finished": it played to the end → apply the loop mode, then play the next one.
    * - "loadFailed": it couldn't be played → play the next one (the error was already reported).
+   *    A broken item is never looped, so a bad link can't fail over and over.
    * - "stopped": we stopped it ourselves (/stop, or /skip on the last track) → do nothing,
-   *    unless it was stopped because it got stuck.
+   *    unless it was stopped because it got stuck (then treat it like "loadFailed").
    * - "replaced": we started another track over it (/skip) → do nothing, the new track is already playing.
    * - "cleanup": the player was destroyed → do nothing.
    */
@@ -134,10 +223,20 @@ export class GuildPlayer {
     const wasStuck = this.advanceAfterStuckTrack;
     this.advanceAfterStuckTrack = false;
 
-    const shouldPlayNext = reason === "finished" || reason === "loadFailed" || (reason === "stopped" && wasStuck);
-    if (!shouldPlayNext || !this.current) return;
+    const ended = this.current;
+    const playedToTheEnd = reason === "finished";
+    const failed = reason === "loadFailed" || (reason === "stopped" && wasStuck);
+    if (!ended || (!playedToTheEnd && !failed)) return;
 
-    this.manager.emit("track:end", this.guildId, this.current, reason);
+    this.manager.emit("track:end", this.guildId, ended, reason);
+
+    if (playedToTheEnd && this.loopMode === "track") {
+      const replayed = await this.tryToPlay(ended);
+      if (replayed) return;
+    }
+    if (playedToTheEnd && this.loopMode === "queue") {
+      this.queue.push(ended);
+    }
     await this.playNext();
   }
 
@@ -150,6 +249,7 @@ export class GuildPlayer {
   reset(): void {
     this.current = null;
     this.queue = [];
+    this.loopMode = "off";
     this.advanceAfterStuckTrack = false;
     this.emitQueueUpdate();
   }
@@ -163,27 +263,25 @@ export class GuildPlayer {
       current: this.current,
       positionMs: this.current ? (player?.position ?? 0) : 0,
       paused: player?.paused ?? false,
+      volume: player?.volume ?? DEFAULT_VOLUME,
+      loopMode: this.loopMode,
       queue: [...this.queue],
     };
   }
 
+  // ---------------------------------------------------------------------------------------------
+  // Internals
+  // ---------------------------------------------------------------------------------------------
+
   /**
-   * Moves the next queued item into `current` and plays it. If an item can't be loaded, the error is
-   * reported and the one after it is tried. When the queue runs out, playback stops but the bot stays in voice.
+   * Plays queued items in order until one works. Items that can't be loaded are reported and dropped.
+   * When the queue runs out, playback stops but the bot stays in voice.
    */
   private async playNext(): Promise<void> {
     while (this.queue.length > 0) {
       const next = this.queue.shift()!;
-      this.current = next;
-      this.emitQueueUpdate();
-
-      try {
-        const track = await resolvePlayable(this.manager.lavalink, next.source, next.requestedBy);
-        await this.playTrack(track);
-        return;
-      } catch (error) {
-        this.manager.emit("error", this.guildId, next, error);
-      }
+      const started = await this.tryToPlay(next);
+      if (started) return;
     }
 
     // Nothing left to play.
@@ -194,14 +292,46 @@ export class GuildPlayer {
     if (player?.queue.current) await player.stopPlaying(/* clearQueue */ false, /* executeAutoplay */ false);
   }
 
+  /** Makes `item` the current item, loads its link and plays it. Returns false (and reports why) if that failed. */
+  private async tryToPlay(item: QueueItem): Promise<boolean> {
+    this.current = item;
+    this.emitQueueUpdate();
+    try {
+      const track = await resolvePlayable(this.manager.lavalink, item.source, item.requestedBy);
+      await this.playTrack(track);
+      return true;
+    } catch (error) {
+      this.manager.emit("error", this.guildId, item, error);
+      return false;
+    }
+  }
+
   /** Tells Lavalink to play `track` now, replacing whatever it is playing. */
   private async playTrack(track: Track): Promise<void> {
     const player = this.lavalinkPlayer;
     if (!player) throw new UserError("Not connected to a voice channel.");
-    await player.play({ clientTrack: track });
+    // Lavalink stays paused across track changes; a new track should always be heard.
+    await player.play({ clientTrack: track, paused: false });
+  }
+
+  /** The Lavalink player, if something is playing. Throws "Nothing is playing" otherwise. */
+  private requirePlaying(): Player {
+    const player = this.lavalinkPlayer;
+    if (!this.current || !player) throw new UserError("Nothing is playing.");
+    return player;
+  }
+
+  private findQueueIndex(itemId: string): number {
+    const index = this.queue.findIndex((item) => item.id === itemId);
+    if (index === -1) throw new UserError("That item isn't in the queue any more.");
+    return index;
   }
 
   private emitQueueUpdate(): void {
     this.manager.emit("queue:update", this.guildId, this.snapshot());
+  }
+
+  private emitPlayerUpdate(): void {
+    this.manager.emit("player:update", this.guildId, this.snapshot());
   }
 }
