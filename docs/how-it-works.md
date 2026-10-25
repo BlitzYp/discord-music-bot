@@ -23,9 +23,10 @@ The bot talks to Lavalink through the [`lavalink-client`](https://github.com/Tom
 | PlayerManager | `src/player/PlayerManager.ts` | The single entry point for playback. Finds the right server's `GuildPlayer` and runs the action. |
 | GuildPlayer | `src/player/GuildPlayer.ts` | One server's state: `current` (playing now) and `queue` (up next). |
 | Resolvers | `src/player/resolvers/` | Turn a link into a track Lavalink can play. |
-| Database | `src/db/` | Settings, and each server's saved playback (SQLite). See [Settings and the database](#settings-and-the-database). |
+| PlaylistManager | `src/playlists/PlaylistManager.ts` | Each server's saved playlists. See [Playlists](#playlists). |
+| Database | `src/db/` | Settings, each server's saved playback, and playlists (SQLite). See [Settings and the database](#settings-and-the-database). |
 
-The rule that holds it together: **commands (and later the website) only call `PlayerManager` methods.** If Discord and the website both go through the same methods, they can never show different queues.
+The rule that holds it together: **commands and the website only call `PlayerManager` (and, for playlists, `PlaylistManager`) methods.** If Discord and the website both go through the same methods, they can never show different queues.
 
 ## What happens on `/play <link>`
 
@@ -110,7 +111,7 @@ The website runs inside the bot's own process (`src/web/`), so it reads the same
 
 | Part | File | Job |
 |---|---|---|
-| REST API | `src/web/routes/` | `auth.ts` (login), `guilds.ts` (your servers, a server's state), `player.ts` (the controls), `settings.ts` (a server's settings), `admin.ts` (the owner's Admin page) |
+| REST API | `src/web/routes/` | `auth.ts` (login), `guilds.ts` (your servers, a server's state), `player.ts` (the controls), `playlists.ts` (the Playlists tab), `settings.ts` (a server's settings), `admin.ts` (the owner's Admin page) |
 | Socket.IO | `src/web/socket.ts` | Pushes every change to the browsers watching that server |
 | The React app | `src/web/frontend.ts` | Serves `web/`: through Vite when running from source (`npm run dev`, instant reloads), or the built `web/dist/` with `npm start` |
 
@@ -118,16 +119,41 @@ How the page stays live:
 
 1. The browser opens a Socket.IO connection and sends `guild:watch` with the server's id (`web/src/useGuildState.ts`).
 2. `socket.ts` checks that the logged-in user is a member of that server, puts the connection in the room `guild:<id>`, and answers with `state`, a full `PlayerSnapshot`.
-3. From then on, every `PlayerManager` event for that server is forwarded to the room: `queue:update` (with a full snapshot) whenever the current track or the queue changes, and `player:update` (position, paused, volume, loop mode, filter) whenever those change and about once a second while playing.
+3. From then on, every `PlayerManager` event for that server is forwarded to the room: `queue:update` (with a full snapshot) whenever the current track or the queue changes, and `player:update` (position, paused, volume, loop mode, filter) whenever those change and about once a second while playing. `playlists:update` says a playlist changed (see [Playlists](#playlists)).
 4. Between updates, `NowPlaying` keeps the progress bar moving by counting up from the last position.
 
 The message types are defined once in `src/shared/types.ts` (`ServerToClientEvents`, `ClientToServerEvents`), and both sides import them, so the TypeScript compiler catches it if the bot and the website disagree. The website imports shared code through `web/src/shared.ts`.
 
 Changes from the website go through REST routes (`src/web/routes/player.ts`), never the socket, so permissions are checked in one place. Buttons call the functions in `web/src/api.ts`. The page doesn't apply a change itself: it waits for the socket's update, exactly as if someone had used the slash command in Discord, so the two can't disagree.
 
-`src/web/http.ts` has `route()`, a wrapper for async route handlers: an `HttpError` becomes its status (401, 403, 404…), a `UserError` becomes 400 with its message, anything else a 500 with the details logged to the console.
+`src/web/http.ts` has `route()`, a wrapper for async route handlers: an `HttpError` becomes its status (401, 403, 404…), a `NotAllowedError` 403 and any other `UserError` 400 with its message, anything else a 500 with the details logged to the console.
 
 The server still listens on `127.0.0.1` only. Making it public is milestone 9; logins and permissions are already in place for that.
+
+## Playlists
+
+Saved, per-server playlists (milestone 7). The rules live in `PlaylistManager` (`src/playlists/PlaylistManager.ts`), so `/playlist` (`src/bot/commands/playlist.ts`) and the website's Playlists tab (`src/web/routes/playlists.ts`, `web/src/components/PlaylistsPage.tsx` and `PlaylistView.tsx`) behave the same.
+
+| File | Job |
+|---|---|
+| `db/playlistStore.ts` | `PlaylistStore`: the `playlists` and `playlist_items` tables. Only stores; every lookup by playlist id also takes the server's id, so an id from one server can't reach another server's playlist. |
+| `playlists/PlaylistManager.ts` | Names (tidied, at most 50 characters, unique per server ignoring case), the 500-song limit, who may remove which song, importing, saving the queue, and playing. Emits `change` after every edit. |
+| `shared/playlists.ts` | The types and limits, shared with the website, plus `isYoutubePlaylistLink()` and `describeAddMany()` (the "Queued 12 songs…" text). |
+
+**Songs are links.** A playlist song stores what a queue item stores: the `TrackSource` plus the title, length and thumbnail read when it was added. Like queued songs, it's loaded only when it plays ("Resolve at play time"), so a playlist can't go stale.
+
+**Adding a song** loads the link once through `fetchMetadata()` (the same as `/play`) to read its title and length. **Importing** a YouTube playlist uses `listPlaylist()` in `player/resolvers/index.ts`, which runs `yt-dlp --flat-playlist -J`: it lists up to 500 videos' links, titles and lengths from the playlist page in a few seconds (182 videos took 4 s when tested), without downloading anything. Private and deleted videos are skipped.
+
+**Playing** turns each song into a new `QueueItem` (a fresh id, requested by whoever pressed Play) and calls `PlayerManager.addMany()`:
+1. Songs longer than the server's `maxTrackDurationSec` are left out and counted.
+2. `"append"`: join voice if needed (`ensureConnected()`), then `GuildPlayer.enqueueMany()` adds as many as the queue limit allows; if nothing was playing, the first one that loads starts.
+3. `"replace"`: `GuildPlayer.replaceQueue()` joins voice first (so "join a voice channel first" leaves the queue alone), drops the current track (into "Recently played", like a skip) and the queue, then calls `enqueueMany()`. The old track keeps playing until the first new song starts over it, and Lavalink then ends the old one with reason `replaced`, which `onTrackEnded()` ignores. After a restart it joins with `{ continueInterrupted: false }`, so the interrupted song isn't started only to be replaced.
+
+The answer (`AddManyResult`) says how many songs were queued, too long, or past the queue limit. **Every song of a playlist link** (`/play playlist: True`, or the checkbox under "Add a song") uses the same path: `PlayerManager.playPlaylistLink()` lists the playlist with yt-dlp and appends it with `addMany()`.
+
+**Who may do what** differs per subcommand: anyone may list, show, add songs, and remove their own songs; the rest is for DJs. Only playing controls playback, so only that follows the server's "Only from the bot's voice channel" setting (see [Login and permissions](#login-and-permissions)). Removing someone else's song as a member throws `NotAllowedError` (a `UserError` that the website answers with 403).
+
+**Live updates.** `PlaylistManager` emits `change` with the server's id; `src/web/socket.ts` forwards it as `playlists:update` to that server's room. It carries no data: the Playlists tab just loads the list and the open playlist again (`usePlaylistChanges()` in `PlaylistsPage.tsx`), so a song added with `/playlist add` appears on everyone's page.
 
 ## Login and permissions
 
@@ -148,9 +174,9 @@ The server still listens on `127.0.0.1` only. Making it public is milestone 9; l
 | dj | the server's DJ role (picked on the Settings tab). No role picked = nobody; @everyone = every member | control playback |
 | member | anyone in the server | look |
 
-- **Slash commands** declare a `permission` (`src/bot/commands/*.ts`), checked in `bot/events/interactionCreate.ts` using the member Discord sends with the command.
+- **Slash commands** declare a `permission` (`src/bot/commands/*.ts`), checked in `bot/events/interactionCreate.ts` using the member Discord sends with the command. A command whose subcommands need different levels (`/playlist`) lists a rule per subcommand in `subcommands`: its `permission`, and `controlsPlayback` (whether the same-voice-channel rule below applies). `ruleFor()` in `commands/types.ts` picks the rule.
 - **Web routes** start with `requireGuildAccess(req, client, level)` (`src/web/access.ts`). It answers 401 if nobody is logged in, 404 if the user (or the bot) isn't in that server, and 403 if their level is too low. It looks the member up through Discord's API (no privileged intent needed), cached for 30 seconds, so a role change takes up to 30 s to apply on the website.
-- **Same voice channel:** with the server's `requireSameVoiceChannel` setting on, `voiceChannelProblem()` (`src/permissions.ts`) refuses DJ actions from a DJ who isn't in the bot's voice channel. Both paths check it right after the level: `interactionCreate.ts` for commands with `permission: "dj"`, and `requireGuildAccess()` for `"dj"` routes. Admins are exempt.
+- **Same voice channel:** with the server's `requireSameVoiceChannel` setting on, `voiceChannelProblem()` (`src/permissions.ts`) refuses DJ actions from a DJ who isn't in the bot's voice channel. Both paths check it right after the level: `interactionCreate.ts` for commands with `permission: "dj"`, and `requireGuildAccess()` for `"dj"` routes. Admins are exempt. It's about controlling playback, so DJ actions that don't (editing playlists) opt out: subcommand rules with `controlsPlayback: false`, and routes that call `requireGuildAccess(req, ctx, "dj", { controlsPlayback: false })`.
 - **The owner's Admin page:** every `/api/admin/...` route starts with `requireOwner(req)`, and `GET /api/me` tells the website whether to show the Admin button (`isOwner`).
 - **The socket** only lets a browser watch a server whose member is logged in.
 - **The website** shows controls only to DJs (`hasLevel(guild.level, "dj")`), but that's just convenience: every change is checked again on the server.
@@ -167,6 +193,7 @@ Everything the bot remembers lives in one SQLite file, `data/bot.db` (`src/db/da
 | `db/migrations.ts` | Creates and updates the tables. Each entry in `MIGRATIONS` runs once; SQLite's `user_version` remembers how many ran. **Change a table by adding an entry**, never by editing one that already ran (existing databases won't run it again). |
 | `db/settingsStore.ts` | `SettingsStore`: the owner's global settings (`global()`) and each server's (`guild(id)`), with `updateGlobal()` / `updateGuild()` that save only the given keys. A server without a row gets the defaults. |
 | `db/playerStateStore.ts` | `PlayerStateStore`: each server's current track, position, queue and history (see the next section). |
+| `db/playlistStore.ts` | `PlaylistStore`: each server's playlists (see [Playlists](#playlists)). |
 | `shared/settings.ts` | The settings' types, defaults and allowed ranges, shared with the website. |
 
 Settings are read from the database every time they're needed, not cached, so a change on the website applies to the very next command (and a new DJ role applies at once, even though Discord roles are cached for 30 s). Who reads what:
@@ -267,6 +294,7 @@ Restart the bot (`npm run dev` does this on save). Commands are registered with 
 
 Things to keep in mind:
 - If the command might take more than a couple of seconds (anything that loads a link), call `await interaction.deferReply()` first and answer with `editReply` instead of `reply`.
+- Subcommands (`/playlist add`, `/playlist play`…): add them with `.addSubcommand()`, read the chosen one with `interaction.options.getSubcommand(true)`, and give each a rule in `subcommands` if they need different permission levels. `commands/playlist.ts` is the example, including name suggestions while typing (`.setAutocomplete(true)` on the option plus an `autocomplete()` method on the command).
 - Command names must be lowercase, with no spaces.
 - Keep Discord-specific code (replies, embeds) in the command and playback logic in `GuildPlayer`/`PlayerManager`, so the website can reuse the same methods.
 - To offer it on the website too, add a route in `src/web/routes/player.ts` (one `djRoute(...)` line calling the same `PlayerManager` method), a function in `web/src/api.ts`, and a button in a component.

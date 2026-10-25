@@ -127,7 +127,11 @@ export class GuildPlayer {
    * Joins the given voice channel if the bot isn't connected yet. If it already is, it stays where it is.
    * After a restart, joining also continues the interrupted track (see `interrupted`).
    */
-  async ensureConnected(voiceChannelId: string | null, textChannelId: string | null): Promise<Player> {
+  async ensureConnected(
+    voiceChannelId: string | null,
+    textChannelId: string | null,
+    { continueInterrupted = true }: { continueInterrupted?: boolean } = {},
+  ): Promise<Player> {
     const existing = this.lavalinkPlayer;
     if (existing?.connected) return existing;
 
@@ -146,7 +150,7 @@ export class GuildPlayer {
     await player.connect();
     // A new Lavalink player has no effect on. `filter` is only set at this point when it was restored after a restart.
     if (this.filter !== "off") await applyFilter(player, this.filter);
-    if (this.interrupted) await this.continueInterrupted();
+    if (this.interrupted && continueInterrupted) await this.continueInterrupted();
     return player;
   }
 
@@ -182,6 +186,50 @@ export class GuildPlayer {
       throw error;
     }
     return { position: 0 };
+  }
+
+  /**
+   * Adds several items to the end of the queue (a playlist), as many as the server's `maxQueueLength` allows.
+   * If nothing is playing, the first one that loads starts. Returns how many were added; the rest didn't fit.
+   */
+  async enqueueMany(items: QueueItem[]): Promise<number> {
+    const { maxQueueLength } = this.manager.settings.guild(this.guildId);
+    const room = maxQueueLength === null ? Infinity : Math.max(0, maxQueueLength - this.queue.length);
+    const nothingPlaying = !this.current;
+    if (room === 0 && !nothingPlaying) {
+      throw new UserError(`The queue is full (this server's limit is ${maxQueueLength} songs).`);
+    }
+
+    // When nothing is playing, the first item starts right away instead of waiting, so one more fits.
+    const fitting = items.slice(0, nothingPlaying ? room + 1 : room);
+    this.queue.push(...fitting);
+    if (nothingPlaying) await this.playNext();
+    else this.emitQueueUpdate();
+    return fitting.length;
+  }
+
+  /**
+   * Replaces the current track and the queue with `items` (playing a saved playlist): the current track stops
+   * and the first item that loads plays. The loop mode and the effect stay as they are.
+   * Joins the given voice channel first if needed. Returns how many items fit in the queue.
+   */
+  async replaceQueue(items: QueueItem[], voiceChannelId: string | null, textChannelId: string | null): Promise<number> {
+    // Connect first, so "join a voice channel first" leaves the queue untouched. A track interrupted by a restart
+    // isn't continued: it's being replaced anyway.
+    await this.ensureConnected(voiceChannelId, textChannelId, { continueInterrupted: false });
+
+    const replaced = this.current;
+    if (replaced && !this.interrupted) {
+      this.manager.emit("track:end", this.guildId, replaced, "replaced");
+      this.addToHistory(replaced);
+    }
+    this.interrupted = null;
+    this.pendingRetry = null;
+    this.advanceAfterStuckTrack = false;
+    this.current = null;
+    this.queue = [];
+    // The old track keeps playing until the first new item starts over it (or, if none loads, playNext stops it).
+    return this.enqueueMany(items);
   }
 
   // ---------------------------------------------------------------------------------------------

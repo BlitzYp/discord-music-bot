@@ -42,7 +42,7 @@ Browser ── HTTPS (CF Tunnel) ──▶ Node process (TypeScript)
 
 Slash commands and web routes are thin wrappers over the same `PlayerManager` methods. Every state change emits an event that the web layer forwards to that server's Socket.IO room. Neither UI keeps its own copy of the state, so Discord and the website always agree.
 
-Planned folders that don't exist yet: `src/library/` (upload pipeline, ffprobe/ffmpeg helpers) and `src/player/resolvers/file.ts`. `data/` (gitignored) holds the SQLite database `bot.db`, the yt-dlp cache and, from milestone 8, `library/`. Startup order in `src/index.ts`: config → db → Lavalink → bot → web.
+`src/playlists/` (milestone 7) holds `PlaylistManager`. Planned folders that don't exist yet: `src/library/` (upload pipeline, ffprobe/ffmpeg helpers) and `src/player/resolvers/file.ts`. `data/` (gitignored) holds the SQLite database `bot.db`, the yt-dlp cache and, from milestone 8, `library/`. Startup order in `src/index.ts`: config → db → Lavalink → bot → web.
 
 ## Playback
 
@@ -63,7 +63,7 @@ Notes:
 - Downloaded files are named by a random id, cached by URL (20 most recent), and deleted on startup. Livestreams can't be downloaded, so they only work through Lavalink.
 - yt-dlp needs a JavaScript runtime for YouTube; the bot passes its own Node.js (`--js-runtimes node:<path>`).
 - Metadata: `yt-dlp -J --no-playlist <url>`, or Lavalink's `loadTracks`.
-- YouTube playlist links (milestone 7): `yt-dlp --flat-playlist -J <url>` lists a playlist's videos without downloading them. See "Playlists" below.
+- YouTube playlist links (built in milestone 7): `yt-dlp --flat-playlist --playlist-end 500 -J <url>` lists a playlist's videos without downloading them (182 videos in about 4 s). See "Playlists" below.
 - yt-dlp lives in `bin/` (`npm run setup:ytdlp`) and is updated with `yt-dlp -U` on every start (unless the owner turns that off), or with "Update now" on the Admin page.
 - Possible improvement: in `ytdlp` mode every song pauses ~10 s before starting; downloading the next queued song while the current one plays would remove the pause.
 - YouTube breaks downloaders regularly; that is why `auto` mode exists. The fix is usually updating yt-dlp and the YouTube plugin version in `lavalink/application.yml`.
@@ -148,7 +148,8 @@ Possibly needed later:
 - `player_state(guild_id PRIMARY KEY, voice_channel_id, text_channel_id, current_item_json, position_ms, paused, volume, loop_mode, filter, updated_at)`
 - `queue_items(guild_id, position, item_json)`: one row per `QueueItem`; position 1 plays next
 - `history_items(guild_id, position, item_json)`: "Recently played"; position 1 is the newest (20 per server)
-- Milestone 8 adds `library_files(id, guild_id, uploaded_by, original_name, path, mime, duration_ms, size_bytes, created_at)`; milestone 7 the playlist tables (see "Playlists").
+- `playlists`, `playlist_items` (migration 2, milestone 7): see "Playlists".
+- Milestone 8 adds `library_files(id, guild_id, uploaded_by, original_name, path, mime, duration_ms, size_bytes, created_at)`.
 
 ### Queue persistence (built in milestone 6)
 - The working copy stays in memory (`Map<guildId, GuildPlayer>`). Every change to the track or the queue rewrites that server's saved state in one transaction; every status change (including Lavalink's once-a-second position update) updates `player_state`. A crash loses about a second.
@@ -157,7 +158,7 @@ Possibly needed later:
 - Restored items are re-resolved when they play, as usual, so expired URLs don't matter.
 - Nice to have: `lavalink-client` session resuming, so a restart of just the bot process doesn't interrupt audio at all while Lavalink keeps running.
 
-## Playlists (milestone 7)
+## Playlists (built in milestone 7)
 
 Saved, per-server playlists, an idea from the owner. They need storage, so they come after the database (milestone 6).
 
@@ -167,14 +168,20 @@ Saved, per-server playlists, an idea from the owner. They need storage, so they 
 - **Playing a playlist (DJ):** "Play" **replaces** the current queue: the current track stops, the queue is cleared, and the playlist's songs are queued in order. The website asks for confirmation first if the queue isn't empty. "Add to queue" appends instead.
 - **Importing a YouTube playlist (DJ):** paste a YouTube playlist link to create a playlist from it (or add its videos to an existing one). `yt-dlp --flat-playlist -J <url>` lists the videos' links, titles and durations in a second or two, without downloading anything. Like everything else, the songs are stored as links and loaded when they play. Cap imports at around 500 songs.
 - **Save the queue as a playlist (DJ):** turns the current track plus the queue into a new playlist.
-- **Pasting a playlist link into "Add a song" or `/play`:** today only the selected video is queued. With playlists built, offer "add all N songs to the queue" for such links too, using the same import.
+- **Pasting a playlist link into "Add a song" or `/play`:** by default only the selected video is queued. A checkbox on the website (`wholePlaylist: true` on `POST /queue`) and `/play playlist: True` queue every song instead, using the same import.
+- Limits: names up to 50 characters, unique per server ignoring upper/lower case; at most 500 songs per playlist. When a playlist plays, the server's queue limit and longest-song setting apply; songs left out are counted in the reply.
+- Rename and reorder are on the website only; Discord has `/playlist remove` for removing by position.
+- Only playing a playlist follows `requireSameVoiceChannel`; editing playlists isn't controlling playback.
 - Spotify playlists would need the LavaSrc plugin and Spotify API keys; out of scope.
 
-**Slash commands:** `/playlist list`, `/playlist show <name>`, `/playlist play <name>`, `/playlist add <name> <link>`, `/playlist create <name>`, `/playlist import <name> <youtube-playlist-link>`, `/playlist delete <name>`.
+**Slash commands:** `/playlist list`, `/playlist show <name>`, `/playlist play <name> [mode]`, `/playlist add <name> <link>`, `/playlist remove <name> <position>`, `/playlist create <name>`, `/playlist import <name> <youtube-playlist-link>` (creates the playlist if it doesn't exist), `/playlist save <name>` (the queue), `/playlist delete <name>`. Names are suggested while typing.
 
 **Data:**
-- `playlists(id, guild_id, name, created_by, created_at)`; name unique per server.
-- `playlist_items(id, playlist_id, position, source_json, title, author, duration_ms, thumbnail, added_by, added_at)`.
+- `playlists(id, guild_id, name COLLATE NOCASE, created_by_id, created_by_name, created_at)`; `UNIQUE (guild_id, name)`.
+- `playlist_items(id, playlist_id, position, source_json, title, author, duration_ms, is_stream, thumbnail, added_by_id, added_by_name, added_at)`; positions are 1, 2, 3… without gaps.
+- The name is stored next to each id, so pages show who made or added something without asking Discord.
+
+**Live updates:** every change emits `playlists:update` (no data) to the server's Socket.IO room; open pages reload the list.
 
 **REST API:**
 ```
@@ -183,7 +190,7 @@ GET    /guilds/:id/playlists/:playlistId              (member) the songs
 POST   /guilds/:id/playlists                          (dj) { name } | { name, importUrl }
 PATCH  /guilds/:id/playlists/:playlistId              (dj) { name }
 DELETE /guilds/:id/playlists/:playlistId              (dj)
-POST   /guilds/:id/playlists/:playlistId/items        (member) { input } | { importUrl }
+POST   /guilds/:id/playlists/:playlistId/items        (member) { input } | (dj) { importUrl }
 DELETE /guilds/:id/playlists/:playlistId/items/:item  (dj, or whoever added it)
 PATCH  /guilds/:id/playlists/:playlistId/items/:item  (dj) { position }
 POST   /guilds/:id/playlists/:playlistId/play         (dj) { mode: "replace" | "append" }
@@ -192,14 +199,14 @@ POST   /guilds/:id/playlists/from-queue               (dj) { name }
 
 ## Real-time (Socket.IO, built in milestone 4)
 - The client sends `guild:watch <id>` and joins the room `guild:<id>`. From milestone 5, the server first checks that the logged-in user is a member of that server.
-- Server → client: `state` (full snapshot on join), `queue:update`, `track:start`, `track:end`, `player:update` (position, paused, volume, loop mode, filter; about once per second while playing), `error`. The types live in `src/shared/types.ts`.
+- Server → client: `state` (full snapshot on join), `queue:update`, `track:start`, `track:end`, `player:update` (position, paused, volume, loop mode, filter; about once per second while playing), `error`, `playlists:update` (milestone 7). The types live in `src/shared/types.ts`.
 - **Changes go over REST; sockets only push updates.** This keeps authorization and validation in one place.
 - The website shows when Lavalink is down. `lavalink-client` reconnects by itself, but playback fails until it does.
 
 ## Interfaces
 
 ### Slash commands
-`/play <query|url>` · `/play file:<attachment>` · `/skip` · `/stop` · `/pause` · `/resume` · `/queue` · `/nowplaying` · `/remove <pos>` · `/move <from> <to>` · `/shuffle` · `/loop off|track|queue` · `/volume <0-150>` · `/filter <effect>` · `/seek <time>` · `/library` · `/dashboard` (link to the website)
+`/play <query|url> [playlist]` · `/play file:<attachment>` · `/playlist …` (see "Playlists") · `/skip` · `/stop` · `/pause` · `/resume` · `/queue` · `/nowplaying` · `/remove <pos>` · `/move <from> <to>` · `/shuffle` · `/loop off|track|queue` · `/volume <0-150>` · `/filter <effect>` · `/seek <time>` · `/library` · `/dashboard` (link to the website)
 
 `/filter` (added alongside milestone 3, at the owner's request) uses Lavalink's built-in filters: nightcore, vaporwave, bassboost, 8d, karaoke, soft, or off. One effect at a time, kept on the player until changed. The website offers the same list (`AUDIO_FILTERS` in `src/shared/filters.ts`) through `POST /guilds/:id/player/filter { filter }`, which needs DJ permission from milestone 5.
 
@@ -212,7 +219,7 @@ POST   /auth/logout
 GET    /me
 GET    /guilds                     servers the user shares with the bot, with their level
 GET    /guilds/:id/state           (member)
-POST   /guilds/:id/queue           (dj) { input: string }       ({ fileId } in milestone 8)
+POST   /guilds/:id/queue           (dj) { input: string, wholePlaylist?: true }   ({ fileId } in milestone 8)
 DELETE /guilds/:id/queue/:itemId   (dj)
 PATCH  /guilds/:id/queue/:itemId   (dj) { position: number }    1 = play next
 POST   /guilds/:id/queue/shuffle   (dj)
@@ -233,9 +240,10 @@ PATCH  /admin/settings             (owner)
 GET    /admin/status               (owner)
 POST   /admin/ytdlp/update         (owner) update yt-dlp now
 ```
+Built in milestone 7: the playlist routes listed under "Playlists".
+
 Planned:
 ```
-GET    /guilds/:id/playlists ...   (milestone 7, see "Playlists")
 GET    /guilds/:id/library
 POST   /guilds/:id/library         (multipart upload)
 DELETE /guilds/:id/library/:fileId

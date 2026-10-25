@@ -1,4 +1,5 @@
 import type {
+  AddManyResult,
   AdminStatus,
   AudioFilter,
   CurrentUser,
@@ -8,6 +9,9 @@ import type {
   GuildSummary,
   LoopMode,
   PlayerSnapshot,
+  PlaylistDetails,
+  PlaylistPlayMode,
+  PlaylistSummary,
 } from "./shared";
 
 /** An error answer from the bot's API, with its HTTP status (401 = not logged in). */
@@ -66,6 +70,9 @@ export function fetchGuilds(): Promise<GuildSummary[]> {
 type State = Promise<PlayerSnapshot>;
 
 export const addToQueue = (guildId: string, input: string): State => request("POST", `/guilds/${guildId}/queue`, { input });
+/** Queues every song of a YouTube playlist link (up to 500). */
+export const addWholePlaylistToQueue = (guildId: string, input: string): State =>
+  request("POST", `/guilds/${guildId}/queue`, { input, wholePlaylist: true });
 export const removeFromQueue = (guildId: string, itemId: string): State =>
   request("DELETE", `/guilds/${guildId}/queue/${itemId}`);
 /** `position` is 1-based, like the numbers in the list: 1 = play next. */
@@ -88,6 +95,43 @@ export const setLoopMode = (guildId: string, mode: LoopMode): State =>
   request("POST", `/guilds/${guildId}/player/loop`, { mode });
 export const setFilter = (guildId: string, filter: AudioFilter): State =>
   request("POST", `/guilds/${guildId}/player/filter`, { filter });
+
+// ---- Saved playlists (everyone looks and adds songs; DJs do the rest) ----
+
+const playlistsPath = (guildId: string) => `/guilds/${guildId}/playlists`;
+type Playlist = Promise<PlaylistDetails>;
+
+export const fetchPlaylists = (guildId: string): Promise<PlaylistSummary[]> => request("GET", playlistsPath(guildId));
+export const fetchPlaylist = (guildId: string, playlistId: number): Playlist =>
+  request("GET", `${playlistsPath(guildId)}/${playlistId}`);
+export const createPlaylist = (guildId: string, name: string): Playlist => request("POST", playlistsPath(guildId), { name });
+/** Creates a playlist from a YouTube playlist link. Without a name it's named after the YouTube playlist. */
+export const importPlaylist = (guildId: string, importUrl: string, name?: string): Playlist =>
+  request("POST", playlistsPath(guildId), { importUrl, name });
+/** Saves the current song plus the queue as a new playlist. */
+export const saveQueueAsPlaylist = (guildId: string, name: string): Playlist =>
+  request("POST", `${playlistsPath(guildId)}/from-queue`, { name });
+export const renamePlaylist = (guildId: string, playlistId: number, name: string): Playlist =>
+  request("PATCH", `${playlistsPath(guildId)}/${playlistId}`, { name });
+export const deletePlaylist = (guildId: string, playlistId: number): Promise<PlaylistSummary[]> =>
+  request("DELETE", `${playlistsPath(guildId)}/${playlistId}`);
+export const playPlaylist = (
+  guildId: string,
+  playlistId: number,
+  mode: PlaylistPlayMode,
+): Promise<{ result: AddManyResult; state: PlayerSnapshot }> =>
+  request("POST", `${playlistsPath(guildId)}/${playlistId}/play`, { mode });
+
+export const addToPlaylist = (guildId: string, playlistId: number, input: string): Playlist =>
+  request("POST", `${playlistsPath(guildId)}/${playlistId}/items`, { input });
+/** Adds every song of a YouTube playlist link to the playlist (DJs). */
+export const importIntoPlaylist = (guildId: string, playlistId: number, importUrl: string): Playlist =>
+  request("POST", `${playlistsPath(guildId)}/${playlistId}/items`, { importUrl });
+export const removeFromPlaylist = (guildId: string, playlistId: number, itemId: number): Playlist =>
+  request("DELETE", `${playlistsPath(guildId)}/${playlistId}/items/${itemId}`);
+/** `position` is 1-based, like the numbers in the list. */
+export const moveInPlaylist = (guildId: string, playlistId: number, itemId: number, position: number): Playlist =>
+  request("PATCH", `${playlistsPath(guildId)}/${playlistId}/items/${itemId}`, { position });
 
 // ---- A server's settings (server admins) ----
 

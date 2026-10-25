@@ -27,6 +27,8 @@ export function useGuildState(guildId: string | null): GuildState {
     const onDisconnect = () => setConnected(false);
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
+    // The socket may have connected after the first render but before these listeners existed.
+    setConnected(socket.connected);
     return () => {
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);

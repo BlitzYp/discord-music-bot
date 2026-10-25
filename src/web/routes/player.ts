@@ -2,6 +2,7 @@ import { type Request, type Response, Router } from "express";
 import { UserError } from "../../player/errors.js";
 import { MAX_VOLUME } from "../../player/GuildPlayer.js";
 import { AUDIO_FILTERS, type AudioFilter } from "../../shared/filters.js";
+import { isYoutubePlaylistLink } from "../../shared/playlists.js";
 import type { LoopMode } from "../../shared/types.js";
 import { type GuildAccess, requireGuildAccess } from "../access.js";
 import { route } from "../http.js";
@@ -34,16 +35,23 @@ export function playerRoutes({ client, players, settings }: WebContext): Router 
 
   // ---- The queue ----
 
+  // { input } adds one link. With `wholePlaylist: true`, a YouTube playlist link queues every song of the playlist.
   djRoute("post", "/guilds/:id/queue", async ({ guild, user }, req) => {
     const input = req.body?.input;
     if (typeof input !== "string" || input.trim() === "") throw new UserError("Paste a link to add.");
-    await players.play(guild.id, {
+    const request = {
       input,
-      requestedBy: { id: user.id, name: user.name, via: "web" },
+      requestedBy: { id: user.id, name: user.name, via: "web" as const },
       // The bot joins the voice channel the user is in, like with /play.
       voiceChannelId: guild.voiceStates.cache.get(user.id)?.channelId ?? null,
       textChannelId: null,
-    });
+    };
+    if (req.body?.wholePlaylist === true) {
+      if (!isYoutubePlaylistLink(input)) throw new UserError(`That isn't a YouTube playlist link (one with "list=" in it).`);
+      await players.playPlaylistLink(guild.id, request);
+    } else {
+      await players.play(guild.id, request);
+    }
   });
 
   djRoute("delete", "/guilds/:id/queue/:itemId", ({ guild }, req) => players.remove(guild.id, req.params.itemId as string));

@@ -1,6 +1,6 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import type { z } from "zod";
-import { UserError } from "../player/errors.js";
+import { NotAllowedError, UserError } from "../player/errors.js";
 
 /** An error with an HTTP status, e.g. 401 (not logged in), 403 (not allowed) or 404 (no such server). */
 export class HttpError extends Error {
@@ -15,6 +15,7 @@ export class HttpError extends Error {
 /**
  * Wraps an async route handler so errors become proper HTTP answers:
  * - HttpError: its status and message.
+ * - NotAllowedError: 403 with its message.
  * - UserError: 400 with its message (the user's mistake, or something they should know).
  * - anything else: 500, with the details in the console only.
  */
@@ -26,7 +27,7 @@ export function route(handler: (req: Request, res: Response) => Promise<void>): 
         return;
       }
       if (error instanceof UserError) {
-        res.status(400).json({ error: error.message });
+        res.status(error instanceof NotAllowedError ? 403 : 400).json({ error: error.message });
         return;
       }
       console.error(`[web] ${req.method} ${req.originalUrl} failed:`, error);

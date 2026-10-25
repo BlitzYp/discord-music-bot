@@ -654,3 +654,79 @@ code {
     grid-column: 1;
   }
 }
+
+/* ---- Playlists ---- */
+
+.playlists {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.playlists button {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+}
+
+.playlists .title {
+  overflow-wrap: anywhere;
+}
+
+.playlists .muted {
+  flex-shrink: 0;
+  font-size: 0.85rem;
+}
+
+.new-playlist,
+.add-to-playlist {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.new-playlist h4 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.new-playlist .hint,
+.add-to-playlist .hint {
+  margin: 0;
+}
+
+.add-to-playlist {
+  margin: 12px 0;
+  padding: 0 0 12px;
+  border-top: none;
+  border-bottom: 1px solid var(--border);
+}
+
+.playlist-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.playlist-actions .hint {
+  margin: 0;
+}
+
+input[type="text"] {
+  font: inherit;
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}

@@ -35,12 +35,16 @@ export interface GuildAccess {
  * Checks that the logged-in user may do something in the server named by the `:id` route parameter.
  * Every guild route starts with this, so no route can forget the check.
  * Throws 401 (not logged in), 404 (the bot isn't in that server, or the user isn't either) or 403 (level too low,
- * or, for DJ actions, not in the bot's voice channel when the server requires that).
+ * or, for DJ actions that control playback, not in the bot's voice channel when the server requires that).
+ *
+ * `controlsPlayback` says whether the server's `requireSameVoiceChannel` setting applies. By default it does for
+ * every "dj" route; DJ routes that don't touch playback (editing playlists) pass `{ controlsPlayback: false }`.
  */
 export async function requireGuildAccess(
   req: Request,
   { client, settings }: Pick<WebContext, "client" | "settings">,
   required: PermissionLevel,
+  { controlsPlayback = required === "dj" }: { controlsPlayback?: boolean } = {},
 ): Promise<GuildAccess> {
   const user = requireUser(req);
   const guild = client.guilds.cache.get(req.params.id as string);
@@ -51,7 +55,7 @@ export async function requireGuildAccess(
   if (!level) throw new HttpError(404, "The bot isn't in that server.");
   if (!hasLevel(level, required)) throw new HttpError(403, `You need to be ${LEVEL_NAMES[required]} to do that.`);
 
-  if (required === "dj") {
+  if (controlsPlayback) {
     const problem = voiceChannelProblem(guild, user.id, level, settings);
     if (problem) throw new HttpError(403, problem);
   }

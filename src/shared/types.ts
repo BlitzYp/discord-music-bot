@@ -97,6 +97,8 @@ export interface ServerToClientEvents {
   "track:end": (item: QueueItem, reason: string) => void;
   /** A short, user-readable playback error. */
   error: (message: string) => void;
+  /** A playlist of the server changed (created, renamed, deleted, songs added/removed/moved). Reload them. */
+  "playlists:update": () => void;
 }
 
 /** Messages the browser sends to the server. */

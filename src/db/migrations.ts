@@ -56,6 +56,38 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (guild_id, position)
   );
   `,
+
+  // 2: saved playlists (milestone 7)
+  `
+  -- Each server's playlists. COLLATE NOCASE makes "Chill" and "chill" the same name, for lookups too.
+  CREATE TABLE playlists (
+    id              INTEGER PRIMARY KEY,
+    guild_id        TEXT NOT NULL,
+    name            TEXT NOT NULL COLLATE NOCASE,
+    created_by_id   TEXT NOT NULL,
+    created_by_name TEXT NOT NULL,
+    created_at      INTEGER NOT NULL,
+    UNIQUE (guild_id, name)
+  );
+
+  -- The songs of each playlist, in order: position 1 plays first. Like the queue, a song is stored as its link
+  -- (source_json, a TrackSource) plus what's shown on the page; it's loaded only when it plays.
+  CREATE TABLE playlist_items (
+    id            INTEGER PRIMARY KEY,
+    playlist_id   INTEGER NOT NULL,
+    position      INTEGER NOT NULL,
+    source_json   TEXT NOT NULL,
+    title         TEXT NOT NULL,
+    author        TEXT,
+    duration_ms   INTEGER,
+    is_stream     INTEGER NOT NULL,
+    thumbnail     TEXT,
+    added_by_id   TEXT NOT NULL,
+    added_by_name TEXT NOT NULL,
+    added_at      INTEGER NOT NULL
+  );
+  CREATE INDEX playlist_items_by_playlist ON playlist_items (playlist_id, position);
+  `,
 ];
 
 /** Brings the database up to date by running the migrations it hasn't run yet. */

@@ -7,6 +7,7 @@ import { GuildPicker } from "./components/GuildPicker";
 import { GuildSettingsForm } from "./components/GuildSettingsForm";
 import { HistoryList } from "./components/HistoryList";
 import { NowPlaying } from "./components/NowPlaying";
+import { PlaylistsPage } from "./components/PlaylistsPage";
 import { QueueList } from "./components/QueueList";
 import { type CurrentUser, type GuildSummary, hasLevel } from "./shared";
 import { useGuildState } from "./useGuildState";
@@ -14,10 +15,14 @@ import { useGuildState } from "./useGuildState";
 /**
  * Which page is showing:
  * - "player": a server's current song, queue and controls;
+ * - "playlists": a server's saved playlists;
  * - "settings": a server's settings (server admins);
  * - "admin": the bot owner's settings and status.
  */
-type View = "player" | "settings" | "admin";
+type View = "player" | "playlists" | "settings" | "admin";
+/** The pages that belong to one server, shown as tabs. */
+type GuildView = Exclude<View, "admin">;
+const VIEWS: readonly View[] = ["player", "playlists", "settings", "admin"];
 
 /**
  * The selected server and page live in the URL (?guild=<id>&view=settings), so a page reload or a shared link
@@ -28,7 +33,7 @@ function readUrl(): { guildId: string | null; view: View } {
   const view = params.get("view");
   return {
     guildId: params.get("guild"),
-    view: view === "settings" || view === "admin" ? view : "player",
+    view: VIEWS.includes(view as View) ? (view as View) : "player",
   };
 }
 
@@ -102,7 +107,7 @@ export function App() {
       {user === null && <LoginScreen />}
       {user && showAdmin && <AdminPanel />}
       {user && !showAdmin && (
-        <Dashboard guildId={guildId} view={view === "settings" ? "settings" : "player"} onNavigate={navigate} />
+        <Dashboard user={user} guildId={guildId} view={view === "admin" ? "player" : view} onNavigate={navigate} />
       )}
     </div>
   );
@@ -121,13 +126,17 @@ function LoginScreen() {
 }
 
 interface DashboardProps {
+  user: CurrentUser;
   guildId: string | null;
-  view: "player" | "settings";
+  view: GuildView;
   onNavigate: (guildId: string | null, view: View) => void;
 }
 
-/** The logged-in view: pick a server, then see (and, as a DJ, control) what's playing there, or its settings. */
-function Dashboard({ guildId, view, onNavigate }: DashboardProps) {
+/**
+ * The logged-in view: pick a server, then see (and, as a DJ, control) what's playing there, its playlists, or
+ * its settings.
+ */
+function Dashboard({ user, guildId, view, onNavigate }: DashboardProps) {
   const [guilds, setGuilds] = useState<GuildSummary[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const { snapshot, receivedAt, error, connected } = useGuildState(guildId);
@@ -147,7 +156,9 @@ function Dashboard({ guildId, view, onNavigate }: DashboardProps) {
   // Hiding controls is only for convenience: the bot checks the permission again for every change.
   const canControl = guild ? hasLevel(guild.level, "dj") : false;
   const isAdmin = guild ? hasLevel(guild.level, "admin") : false;
-  const showSettings = view === "settings" && isAdmin;
+  // Members who open a settings link see the player instead.
+  const shownView: GuildView = view === "settings" && !isAdmin ? "player" : view;
+  const queuedSongs = snapshot ? (snapshot.current ? 1 : 0) + snapshot.queue.length : 0;
 
   return (
     <>
@@ -163,14 +174,11 @@ function Dashboard({ guildId, view, onNavigate }: DashboardProps) {
       )}
       {guilds?.length === 1 && guild && <p className="muted server-name">{guild.name}</p>}
 
-      {guild && isAdmin && (
+      {guild && (
         <nav className="tabs">
-          <button type="button" className={showSettings ? "" : "active"} onClick={() => onNavigate(guild.id, "player")}>
-            Player
-          </button>
-          <button type="button" className={showSettings ? "active" : ""} onClick={() => onNavigate(guild.id, "settings")}>
-            Settings
-          </button>
+          <TabButton view="player" label="Player" shownView={shownView} onPick={(v) => onNavigate(guild.id, v)} />
+          <TabButton view="playlists" label="Playlists" shownView={shownView} onPick={(v) => onNavigate(guild.id, v)} />
+          {isAdmin && <TabButton view="settings" label="Settings" shownView={shownView} onPick={(v) => onNavigate(guild.id, v)} />}
         </nav>
       )}
 
@@ -179,9 +187,12 @@ function Dashboard({ guildId, view, onNavigate }: DashboardProps) {
       {loadError && <p className="banner error">Couldn't load your servers: {loadError}</p>}
 
       {guilds && !guildId && <GuildPicker guilds={guilds} onPick={(id) => onNavigate(id, "player")} />}
-      {showSettings && guildId && <GuildSettingsForm guildId={guildId} />}
-      {!showSettings && guildId && !snapshot && connected && <p className="muted">Loading…</p>}
-      {!showSettings && snapshot && guildId && (
+      {shownView === "settings" && guildId && <GuildSettingsForm guildId={guildId} />}
+      {shownView === "playlists" && guildId && (
+        <PlaylistsPage guildId={guildId} userId={user.id} canControl={canControl} queuedSongs={queuedSongs} />
+      )}
+      {shownView === "player" && guildId && !snapshot && connected && <p className="muted">Loading…</p>}
+      {shownView === "player" && snapshot && guildId && (
         <main>
           {guild && !canControl && (
             <p className="muted hint member-hint">You can watch, but only DJs can control playback. A server admin picks the DJ role.</p>
@@ -199,5 +210,20 @@ function Dashboard({ guildId, view, onNavigate }: DashboardProps) {
         </main>
       )}
     </>
+  );
+}
+
+interface TabButtonProps {
+  view: GuildView;
+  label: string;
+  shownView: GuildView;
+  onPick: (view: GuildView) => void;
+}
+
+function TabButton({ view, label, shownView, onPick }: TabButtonProps) {
+  return (
+    <button type="button" className={view === shownView ? "active" : ""} onClick={() => onPick(view)}>
+      {label}
+    </button>
   );
 }

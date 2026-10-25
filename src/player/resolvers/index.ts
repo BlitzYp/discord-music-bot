@@ -3,7 +3,7 @@ import type { YoutubeMode } from "../../shared/settings.js";
 import type { QueueItem, Requester, TrackSource } from "../../shared/types.js";
 import { UserError } from "../errors.js";
 import { loadFileWithLavalink, loadUrlWithLavalink } from "./lavalink.js";
-import { downloadAudio, fetchInfo } from "./ytdlp.js";
+import { downloadAudio, fetchInfo, fetchPlaylist } from "./ytdlp.js";
 
 const YOUTUBE_HOSTS = new Set(["youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be"]);
 
@@ -20,7 +20,7 @@ export interface ResolvedTrack {
 export type TrackMetadata = Pick<QueueItem, "title" | "author" | "durationMs" | "isStream" | "thumbnail">;
 
 /** Turns user input into a TrackSource. Only links are accepted for now. */
-export function parseInput(input: string): TrackSource {
+export function parseInput(input: string): Extract<TrackSource, { url: string }> {
   let url: URL;
   try {
     url = new URL(input.trim());
@@ -120,6 +120,50 @@ export async function fetchMetadata(
     }
   }
   throw lastError;
+}
+
+/** A song read from a playlist link: its own link plus what's shown for it. */
+export interface PlaylistEntry {
+  source: TrackSource;
+  meta: TrackMetadata;
+}
+
+/** YouTube shows these instead of a title for videos in a playlist that nobody can watch any more. */
+const UNAVAILABLE_TITLES = new Set(["[Private video]", "[Deleted video]"]);
+
+/**
+ * Reads the songs of a playlist link (a YouTube playlist, or a video opened from one), at most `limit` of them.
+ * Uses yt-dlp, which lists them without downloading anything. Private and deleted videos are left out.
+ */
+export async function listPlaylist(url: string, limit: number): Promise<{ title: string; entries: PlaylistEntry[] }> {
+  const playlist = await fetchPlaylist(url, limit);
+  const entries: PlaylistEntry[] = [];
+  for (const entry of playlist.entries ?? []) {
+    if (!entry.url || !entry.title || UNAVAILABLE_TITLES.has(entry.title)) continue;
+    let source: TrackSource;
+    try {
+      source = parseInput(entry.url);
+    } catch {
+      continue; // not an http(s) link; nothing we could play
+    }
+    entries.push({
+      source,
+      meta: {
+        title: entry.title,
+        author: entry.uploader ?? entry.channel ?? undefined,
+        durationMs: entry.duration ? Math.round(entry.duration * 1000) : undefined,
+        isStream: false,
+        thumbnail: largestThumbnail(entry.thumbnails),
+      },
+    });
+  }
+  if (entries.length === 0) throw new UserError("No playable songs were found in that playlist.");
+  return { title: playlist.title || "Imported playlist", entries };
+}
+
+function largestThumbnail(thumbnails: { url: string; width?: number }[] | undefined): string | undefined {
+  if (!thumbnails?.length) return undefined;
+  return thumbnails.reduce((best, t) => ((t.width ?? 0) > (best.width ?? 0) ? t : best)).url;
 }
 
 function metadataFromTrack(track: Track): TrackMetadata {

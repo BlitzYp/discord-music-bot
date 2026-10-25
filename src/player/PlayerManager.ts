@@ -4,10 +4,11 @@ import type { LavalinkManager } from "lavalink-client";
 import type { PlayerStateStore, SavedPlayer, SavedStatus } from "../db/playerStateStore.js";
 import type { SettingsStore } from "../db/settingsStore.js";
 import { formatDuration } from "../shared/format.js";
+import { type AddManyResult, MAX_PLAYLIST_SONGS, type PlaylistPlayMode } from "../shared/playlists.js";
 import type { AudioFilter, LoopMode, PlayerSnapshot, QueueItem, Requester } from "../shared/types.js";
 import { UserError } from "./errors.js";
 import { GuildPlayer } from "./GuildPlayer.js";
-import { fetchMetadata, parseInput, type TrackMetadata } from "./resolvers/index.js";
+import { fetchMetadata, listPlaylist, parseInput, type TrackMetadata } from "./resolvers/index.js";
 
 /**
  * Events PlayerManager emits whenever something changes. The bot posts "error" in Discord;
@@ -84,6 +85,43 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
 
     const { position } = await player.run(() => player.enqueue(item, track));
     return { item, position };
+  }
+
+  /**
+   * Adds every song of a playlist link (a YouTube playlist, or a video opened from one) to the end of the queue,
+   * joining the requester's voice channel first if needed. Returns the playlist's title and what was added.
+   */
+  async playPlaylistLink(guildId: string, request: PlayRequest): Promise<{ title: string; result: AddManyResult }> {
+    const url = parseInput(request.input).url;
+    const player = this.getOrCreatePlayer(guildId);
+    // Join voice before reading the playlist, so "join a voice channel first" comes back immediately.
+    await player.run(() => player.ensureConnected(request.voiceChannelId, request.textChannelId));
+
+    const { title, entries } = await listPlaylist(url, MAX_PLAYLIST_SONGS);
+    const items = entries.map(({ source, meta }) => ({ id: randomUUID(), source, ...meta, requestedBy: request.requestedBy }));
+    const result = await this.addMany(guildId, items, request, "append");
+    return { title, result };
+  }
+
+  /**
+   * Queues several items at once (a saved playlist, or every song of a playlist link). "replace" stops the
+   * current track and empties the queue first; "append" adds to the end. Joins the requester's voice channel if
+   * needed. Songs over the server's length limit, or past its queue limit, are left out and counted.
+   */
+  async addMany(guildId: string, items: QueueItem[], request: VoiceRequest, mode: PlaylistPlayMode): Promise<AddManyResult> {
+    const allowed = items.filter((item) => !this.isTooLong(guildId, item.durationMs));
+    const tooLong = items.length - allowed.length;
+    if (allowed.length === 0) {
+      throw new UserError(tooLong > 0 ? "Every song is longer than this server allows." : "There are no songs to add.");
+    }
+
+    const player = this.getOrCreatePlayer(guildId);
+    const added = await player.run(async () => {
+      if (mode === "replace") return player.replaceQueue(allowed, request.voiceChannelId, request.textChannelId);
+      await player.ensureConnected(request.voiceChannelId, request.textChannelId);
+      return player.enqueueMany(allowed);
+    });
+    return { added, tooLong, queueFull: allowed.length - added };
   }
 
   /** Skips the current track. Returns the skipped item, or null if nothing was playing. */
@@ -247,13 +285,18 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
 
   /** Refuses songs longer than the server's `maxTrackDurationSec` setting. Livestreams have no length and are allowed. */
   private checkDurationLimit(guildId: string, meta: TrackMetadata): void {
-    const limitSec = this.settings.guild(guildId).maxTrackDurationSec;
-    if (limitSec === null || meta.durationMs === undefined) return;
-    if (meta.durationMs > limitSec * 1000) {
+    if (this.isTooLong(guildId, meta.durationMs)) {
+      const limitMs = this.settings.guild(guildId).maxTrackDurationSec! * 1000;
       throw new UserError(
-        `That song is ${formatDuration(meta.durationMs)} long; this server allows songs up to ${formatDuration(limitSec * 1000)}.`,
+        `That song is ${formatDuration(meta.durationMs)} long; this server allows songs up to ${formatDuration(limitMs)}.`,
       );
     }
+  }
+
+  /** Whether a song is longer than the server's `maxTrackDurationSec` setting. Unknown lengths (livestreams) aren't. */
+  private isTooLong(guildId: string, durationMs: number | undefined): boolean {
+    const limitSec = this.settings.guild(guildId).maxTrackDurationSec;
+    return limitSec !== null && durationMs !== undefined && durationMs > limitSec * 1000;
   }
 
   private cancelLeaveTimer(guildId: string): void {

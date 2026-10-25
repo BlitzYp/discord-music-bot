@@ -48,6 +48,31 @@ export async function fetchInfo(url: string): Promise<YtDlpInfo> {
   return info;
 }
 
+/** The fields we use from `yt-dlp --flat-playlist -J`: the playlist's title and one entry per video. */
+export interface YtDlpPlaylist {
+  title?: string;
+  entries?: YtDlpPlaylistEntry[];
+}
+
+export interface YtDlpPlaylistEntry {
+  url?: string;
+  title?: string;
+  duration?: number | null; // seconds
+  uploader?: string | null;
+  channel?: string | null;
+  thumbnails?: { url: string; width?: number }[];
+}
+
+/**
+ * Lists the videos of a playlist (a YouTube playlist, or a video link with `&list=`) without downloading
+ * anything. `--flat-playlist` reads only the playlist page, so even a few hundred videos take a few seconds.
+ * At most `limit` entries are read.
+ */
+export async function fetchPlaylist(url: string, limit: number): Promise<YtDlpPlaylist> {
+  const json = await runYtDlp(["--flat-playlist", "--playlist-end", String(limit), "-J", url], 120_000);
+  return JSON.parse(json) as YtDlpPlaylist;
+}
+
 /**
  * Downloads a link's audio and returns the file's path. Concurrent and repeated requests for the same
  * link share one download.

@@ -2,6 +2,7 @@ import { filter } from "./filter.js";
 import { loop } from "./loop.js";
 import { move } from "./move.js";
 import { pause } from "./pause.js";
+import { playlist } from "./playlist.js";
 import { play } from "./play.js";
 import { queue } from "./queue.js";
 import { remove } from "./remove.js";
@@ -14,5 +15,7 @@ import { volume } from "./volume.js";
 import type { Command } from "./types.js";
 
 /** Every slash command. Adding one here is all it takes to register it with Discord on the next start. */
-export const commands: Command[] = [play, pause, resume, skip, stop, seek, queue, remove, move, shuffle, loop, volume, filter];
+export const commands: Command[] = [
+  play, pause, resume, skip, stop, seek, queue, remove, move, shuffle, loop, volume, filter, playlist,
+];
 export const commandsByName = new Map(commands.map((c) => [c.data.name, c]));

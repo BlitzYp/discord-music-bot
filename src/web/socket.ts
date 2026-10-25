@@ -15,7 +15,11 @@ const roomFor = (guildId: string) => `guild:${guildId}`;
  * that the logged-in user is a member there, every PlayerManager event for that server is pushed to it.
  * Sockets only push updates: changes go through the REST API, so permissions are checked in one place.
  */
-export function attachSocket(httpServer: HttpServer, { client, players, settings }: WebContext, session: RequestHandler): void {
+export function attachSocket(
+  httpServer: HttpServer,
+  { client, players, playlists, settings }: WebContext,
+  session: RequestHandler,
+): void {
   const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer);
   // Runs the session middleware on the socket's opening request, so we know who is connected.
   io.engine.use(session);
@@ -45,6 +49,8 @@ export function attachSocket(httpServer: HttpServer, { client, players, settings
     const message = item ? `Couldn't play "${item.title}": ${reason}` : `Playback error: ${reason}`;
     io.to(roomFor(guildId)).emit("error", message);
   });
+  // Only a nudge: the Playlists tab reloads what it shows through the REST API.
+  playlists.on("change", (guildId) => io.to(roomFor(guildId)).emit("playlists:update"));
 }
 
 function toStatus({ positionMs, paused, volume, loopMode, filter }: PlayerSnapshot): PlayerStatus {
