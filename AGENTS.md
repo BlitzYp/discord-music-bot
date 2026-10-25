@@ -24,7 +24,7 @@ Build them in order. Each milestone works end to end in Discord before the next 
 4. **Read-only web view:** Express + Socket.IO + React page showing the current track and the queue live (localhost, no auth yet). *(working)*
 5. **Auth + web controls:** Discord OAuth, server list, permission checks, and the website's controls: adding links, pause/resume, skip, stop, seek, volume, loop, effects, reorder and remove; plus song history. *(working)*
 6. **Settings + persistence:** SQLite, per-server settings page (DJ role!), owner admin panel (YouTube mode, limits, status), queues and history restored after restart. *(written)*
-7. **Playlists:** per-server saved playlists that members add to and DJs play (replacing the queue), importing YouTube playlists, saving the queue as a playlist; `/playlist` and the website's Playlists tab. See "Playlists" in docs/design.md. *(written)*
+7. **Playlists:** per-server saved playlists that members add to and DJs play (replacing the queue), importing YouTube playlists, saving the queue as a playlist; `/playlist` and the website's Playlists tab. See "Playlists" in docs/design.md. *(working)*
 8. **Library:** `/play file:`, website uploads, ffprobe/ffmpeg pipeline, library browser.
 9. **Polish:** text search, Cloudflare Tunnel (public URL), run as a background service (pm2 or NSSM).
 
