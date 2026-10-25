@@ -2,7 +2,7 @@
 
 A self-hosted Discord bot that plays audio in voice channels, controlled by slash commands and (later) a web dashboard. TypeScript + discord.js v14; audio is played by Lavalink v4, a separate Java server on the same machine. Runs on the owner's Windows PC for their own and friends' servers.
 
-**Status:** milestone 1 works: the owner played YouTube through `/play` in Discord on 2026-10-25. Milestone 2 is written and its queue logic passes a fake-Lavalink test, but it hasn't been tested in Discord yet. YouTube playback needs the unreleased plugin build pinned in `lavalink/application.yml` (its comments explain why). Milestone 3 is written and tested against the owner's Lavalink (yt-dlp downloads, the SoundCloud fallback, retrying a failed track with yt-dlp), but not yet in Discord. `/filter` (an extra beside milestone 3) was confirmed working in Discord by the owner on 2026-10-25. Milestone 4 (read-only website on localhost:3000) is written; the API, socket and empty state were checked in a browser, but live updates during playback haven't been watched yet.
+**Status:** milestone 1 works: the owner played YouTube through `/play` in Discord on 2026-10-25. Milestone 2 is written and its queue logic passes a fake-Lavalink test, but it hasn't been tested in Discord yet. YouTube playback needs the unreleased plugin build pinned in `lavalink/application.yml` (its comments explain why). Milestone 3 is written and tested against the owner's Lavalink (yt-dlp downloads, the SoundCloud fallback, retrying a failed track with yt-dlp), but not yet in Discord. `/filter` (an extra beside milestone 3) was confirmed working in Discord by the owner on 2026-10-25. Milestone 4 (read-only website on localhost:3000) works: the current track, live progress bar and queue were seen updating in a browser while the owner played music on 2026-10-25.
 
 ## Where to look
 
@@ -17,7 +17,7 @@ Build them in order. Each milestone works end to end in Discord before the next 
 1. **Skeleton:** config, Lavalink running, bot online; `/play <url>` through the Lavalink YouTube plugin; `/skip`, `/stop`, `/queue`. *(working)*
 2. **Player features:** pause/resume, remove/move, loop, shuffle, volume, leave automatically when the channel is empty. *(written)*
 3. **YouTube resolver modes:** yt-dlp resolver and `auto` fallback (mode hardcoded for now). *(written)*
-4. **Read-only web view:** Express + Socket.IO + React page showing the current track and the queue live (localhost, no auth yet). *(written)*
+4. **Read-only web view:** Express + Socket.IO + React page showing the current track and the queue live (localhost, no auth yet). *(working)*
 5. **Auth + web controls:** Discord OAuth, server list, permission checks, adding links, skip, reorder and remove from the website.
 6. **Settings + persistence:** SQLite, per-server settings page, owner admin panel (YouTube mode, limits, status), queues restored after restart.
 7. **Library:** `/play file:`, website uploads, ffprobe/ffmpeg pipeline, library browser.

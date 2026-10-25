@@ -16,7 +16,10 @@ export function QueueList({ queue }: { queue: QueueItem[] }) {
   return (
     <section className="card">
       <h3>
-        Up next <span className="muted">· {queue.length} tracks · {formatDuration(totalMs)}</span>
+        Up next{" "}
+        <span className="muted">
+          · {queue.length} {queue.length === 1 ? "track" : "tracks"} · {formatDuration(totalMs)}
+        </span>
       </h3>
       <ol className="queue">
         {queue.map((item, index) => (
