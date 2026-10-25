@@ -323,6 +323,22 @@ export class GuildPlayer {
     this.emitQueueUpdate();
   }
 
+  /** Removes everything waiting in the queue. The current track keeps playing. Returns how many were removed. */
+  clearQueue(): number {
+    const removed = this.queue.length;
+    this.queue = [];
+    this.emitQueueUpdate();
+    return removed;
+  }
+
+  /** Forgets the "Recently played" list. Returns how many items it held. */
+  clearHistory(): number {
+    const removed = this.history.length;
+    this.history = [];
+    this.emitQueueUpdate();
+    return removed;
+  }
+
   // ---------------------------------------------------------------------------------------------
   // Reacting to Lavalink events (called by PlayerManager)
   // ---------------------------------------------------------------------------------------------

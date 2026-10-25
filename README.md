@@ -100,7 +100,7 @@ npm run dev
 While the bot runs, open **http://localhost:3000** (or whatever `WEB_PORT` is) and log in with Discord. You see the servers you share with the bot; with more than one, pick one at the top. Everything updates live as things change in Discord.
 
 - **Everyone** sees the current song with its progress bar, the active effect, the queue, and the recently played songs.
-- **DJs** also get the controls: add a link, pause/resume, skip, stop, drag the progress bar to seek, volume, loop, effects, move ↑↓ or remove queued songs, shuffle, and "Play again" on recently played songs.
+- **DJs** also get the controls: add a link, pause/resume, skip, stop, drag the progress bar to seek, volume, loop, effects, move ↑↓ or remove queued songs, shuffle, clear the queue (the current song keeps playing), and "Play again" on recently played songs or clear that list.
 - Adding a song from the website joins the voice channel you're in, like `/play`.
 - **Server admins** get a **Settings** tab for that server:
 

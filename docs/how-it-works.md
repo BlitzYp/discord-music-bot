@@ -220,16 +220,16 @@ Saved items are links, loaded again when they play like any queued item, so link
 
 ## How to add a slash command
 
-Example: a `/clear` command that empties the queue but keeps the current track playing.
+Example: a `/clear` command that empties the queue but keeps the current track playing. (Steps 1 and 2 already exist for this one, because the website's Clear button uses them; they're shown as the pattern to follow.)
 
 **1. Add the logic to `GuildPlayer`** (`src/player/GuildPlayer.ts`):
 
 ```ts
-/** Removes everything from the queue. The current track keeps playing. Returns how many items were removed. */
-clear(): number {
+/** Removes everything waiting in the queue. The current track keeps playing. Returns how many were removed. */
+clearQueue(): number {
   const removed = this.queue.length;
   this.queue = [];
-  this.emitQueueUpdate();
+  this.emitQueueUpdate(); // saves the change and tells the website
   return removed;
 }
 ```
@@ -237,10 +237,10 @@ clear(): number {
 **2. Expose it on `PlayerManager`** (`src/player/PlayerManager.ts`), going through `run()`:
 
 ```ts
-async clear(guildId: string): Promise<number> {
+async clearQueue(guildId: string): Promise<number> {
   const player = this.players.get(guildId);
   if (!player) return 0;
-  return player.run(async () => player.clear());
+  return player.run(async () => player.clearQueue());
 }
 ```
 
@@ -255,7 +255,7 @@ export const clear: Command = {
   data: new SlashCommandBuilder().setName("clear").setDescription("Empty the queue (the current track keeps playing)"),
 
   async execute(interaction, { players }) {
-    const removed = await players.clear(interaction.guildId);
+    const removed = await players.clearQueue(interaction.guildId);
     await interaction.reply(removed > 0 ? `Removed ${removed} tracks from the queue.` : "The queue is already empty.");
   },
 };

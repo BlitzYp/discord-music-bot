@@ -5,7 +5,7 @@ import { useAction } from "../useAction";
 interface Props {
   guildId: string;
   history: QueueItem[];
-  /** Whether the user is a DJ (shows "Play again"). */
+  /** Whether the user is a DJ (shows "Play again" and Clear). */
   canControl: boolean;
 }
 
@@ -14,9 +14,20 @@ export function HistoryList({ guildId, history, canControl }: Props) {
   const { run, pending, error } = useAction();
   if (history.length === 0) return null;
 
+  function clear() {
+    if (confirm("Clear the recently played list?")) void run(() => api.clearHistory(guildId));
+  }
+
   return (
     <section className="card">
-      <h3>Recently played</h3>
+      <h3 className="with-action">
+        <span>Recently played</span>
+        {canControl && (
+          <button type="button" className="small" disabled={pending} onClick={clear}>
+            🗑 Clear
+          </button>
+        )}
+      </h3>
       <ol className="queue history">
         {history.map((item) => {
           // Re-adding works by link, the same as pasting it into "Add a song". (Library files come in milestone 8.)

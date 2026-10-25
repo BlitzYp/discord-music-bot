@@ -55,6 +55,8 @@ export function playerRoutes({ client, players, settings }: WebContext): Router 
   });
 
   djRoute("post", "/guilds/:id/queue/shuffle", ({ guild }) => players.shuffle(guild.id));
+  djRoute("delete", "/guilds/:id/queue", ({ guild }) => players.clearQueue(guild.id));
+  djRoute("delete", "/guilds/:id/history", ({ guild }) => players.clearHistory(guild.id));
 
   // ---- The player ----
 

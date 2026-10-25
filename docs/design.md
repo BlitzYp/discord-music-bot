@@ -216,6 +216,8 @@ POST   /guilds/:id/queue           (dj) { input: string }       ({ fileId } in m
 DELETE /guilds/:id/queue/:itemId   (dj)
 PATCH  /guilds/:id/queue/:itemId   (dj) { position: number }    1 = play next
 POST   /guilds/:id/queue/shuffle   (dj)
+DELETE /guilds/:id/queue           (dj) empty the queue; the current track keeps playing
+DELETE /guilds/:id/history         (dj) empty "Recently played"
 POST   /guilds/:id/player/skip | pause | resume | stop   (dj)
 POST   /guilds/:id/player/seek     (dj) { positionMs }
 POST   /guilds/:id/player/volume   (dj) { volume }

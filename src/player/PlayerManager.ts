@@ -152,6 +152,20 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
     await player.run(async () => player.shuffle());
   }
 
+  /** Empties the queue; the current track keeps playing. Returns how many items were removed. */
+  async clearQueue(guildId: string): Promise<number> {
+    const player = this.players.get(guildId);
+    if (!player) return 0;
+    return player.run(async () => player.clearQueue());
+  }
+
+  /** Empties the "Recently played" list. Returns how many items were removed. */
+  async clearHistory(guildId: string): Promise<number> {
+    const player = this.players.get(guildId);
+    if (!player) return 0;
+    return player.run(async () => player.clearHistory());
+  }
+
   /** What's playing and queued in a server right now. */
   getState(guildId: string): PlayerSnapshot {
     const player = this.players.get(guildId);

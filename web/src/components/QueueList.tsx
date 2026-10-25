@@ -5,7 +5,7 @@ import { useAction } from "../useAction";
 interface Props {
   guildId: string;
   queue: QueueItem[];
-  /** Whether the user is a DJ (shows the move/remove buttons and Shuffle). */
+  /** Whether the user is a DJ (shows the move/remove buttons, Shuffle and Clear). */
   canControl: boolean;
 }
 
@@ -24,6 +24,12 @@ export function QueueList({ guildId, queue, canControl }: Props) {
 
   const totalMs = queue.reduce((sum, item) => sum + (item.durationMs ?? 0), 0);
 
+  function clear() {
+    // Can't be undone, so ask first. The current track keeps playing.
+    const count = queue.length === 1 ? "the 1 track" : `all ${queue.length} tracks`;
+    if (confirm(`Remove ${count} from the queue? The current track keeps playing.`)) void run(() => api.clearQueue(guildId));
+  }
+
   return (
     <section className="card">
       <h3 className="with-action">
@@ -33,10 +39,17 @@ export function QueueList({ guildId, queue, canControl }: Props) {
             · {queue.length} {queue.length === 1 ? "track" : "tracks"} · {formatDuration(totalMs)}
           </span>
         </span>
-        {canControl && queue.length > 1 && (
-          <button type="button" className="small" disabled={pending} onClick={() => run(() => api.shuffleQueue(guildId))}>
-            🔀 Shuffle
-          </button>
+        {canControl && (
+          <span className="row-actions">
+            {queue.length > 1 && (
+              <button type="button" className="small" disabled={pending} onClick={() => run(() => api.shuffleQueue(guildId))}>
+                🔀 Shuffle
+              </button>
+            )}
+            <button type="button" className="small" disabled={pending} onClick={clear}>
+              🗑 Clear
+            </button>
+          </span>
         )}
       </h3>
 
