@@ -5,6 +5,7 @@ import type { Command } from "./types.js";
 const SHOWN = 10;
 
 export const queue: Command = {
+  permission: "member",
   data: new SlashCommandBuilder().setName("queue").setDescription("Show the current track and what's coming up"),
 
   async execute(interaction, { players }) {

@@ -3,6 +3,7 @@ import { formatItem } from "../format.js";
 import type { Command } from "./types.js";
 
 export const skip: Command = {
+  permission: "dj",
   data: new SlashCommandBuilder().setName("skip").setDescription("Skip the current track"),
 
   async execute(interaction, { players }) {

@@ -4,6 +4,7 @@ import { itemAtPosition } from "./positions.js";
 import type { Command } from "./types.js";
 
 export const move: Command = {
+  permission: "dj",
   data: new SlashCommandBuilder()
     .setName("move")
     .setDescription("Move a track to a different place in the queue")

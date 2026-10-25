@@ -122,14 +122,10 @@ main {
 
 /* ---- Now playing ---- */
 
-.now-playing {
+.now-playing .track {
   display: flex;
   gap: 16px;
   align-items: flex-start;
-}
-
-.now-playing.empty {
-  display: block;
 }
 
 .artwork {
@@ -352,12 +348,180 @@ footer {
 }
 
 /* Phones: stack the artwork above the details. */
+/* ---- Buttons and form fields ---- */
+
+button,
+a.button {
+  font: inherit;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+}
+
+button:hover:not(:disabled),
+a.button:hover {
+  border-color: var(--accent);
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+button.small {
+  padding: 2px 10px;
+  font-size: 0.85rem;
+}
+
+a.button {
+  margin: 8px 0;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+input[type="url"] {
+  font: inherit;
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* A range slider whose filled part is drawn with a gradient up to --fill. */
+.slider {
+  flex: 1;
+  appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to right, var(--accent) var(--fill, 0%), var(--border) var(--fill, 0%));
+  cursor: pointer;
+}
+
+.slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.slider:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* ---- Header and account ---- */
+
+.account {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.account img {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+}
+
+.server-select {
+  margin-bottom: 16px;
+}
+
+.server-name {
+  margin: -8px 0 16px;
+}
+
+/* ---- Add a song ---- */
+
+.add-song {
+  display: flex;
+  gap: 8px;
+}
+
+/* ---- Player controls ---- */
+
+.controls {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.controls .buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.loop,
+.volume {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+}
+
+.volume {
+  flex: 1;
+  min-width: 180px;
+}
+
+.volume-value {
+  width: 3.5em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+/* ---- Rows in the queue and history ---- */
+
+.with-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.row-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.row-actions button {
+  padding: 2px 8px;
+}
+
+/* Phones: stack the artwork above the details. */
 @media (max-width: 520px) {
-  .now-playing {
+  .now-playing .track {
     flex-direction: column;
   }
 
   .artwork {
     width: 100%;
+  }
+
+  .queue .row-actions {
+    flex-direction: column;
   }
 }

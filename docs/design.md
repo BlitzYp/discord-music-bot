@@ -16,7 +16,7 @@ The full design of the bot: decisions, how each part should work, and the planne
 | ffmpeg | Only `ffprobe` validation + transcoding unsupported uploads. Not in the playback path. |
 | Web backend | Express + Socket.IO, in the same process as the bot |
 | Web frontend | React + Vite SPA, served by Express in production |
-| Auth | Discord OAuth2 login |
+| Auth | Discord OAuth2 login (`identify` only), session in a signed cookie |
 | Permissions | Per-server DJ role (configurable); server admins bypass; bot owner controls global settings |
 | No DJ role set | Admins only until a server admin picks a DJ role |
 | Voice-channel requirement | Not required to control playback (`requireSameVoiceChannel` defaults to off) |
@@ -63,13 +63,13 @@ Notes:
 - Downloaded files are named by a random id, cached by URL (20 most recent), and deleted on startup. Livestreams can't be downloaded, so they only work through Lavalink.
 - yt-dlp needs a JavaScript runtime for YouTube; the bot passes its own Node.js (`--js-runtimes node:<path>`).
 - Metadata: `yt-dlp -J --no-playlist <url>`, or Lavalink's `loadTracks`.
-- Playlists (milestone 8): `yt-dlp --flat-playlist -J <url>` expands a playlist into individual items.
+- YouTube playlist links (milestone 7): `yt-dlp --flat-playlist -J <url>` lists a playlist's videos without downloading them. See "Playlists" below.
 - yt-dlp lives in `bin/` (`npm run setup:ytdlp`) and is updated with `yt-dlp -U` on every start.
 - Possible improvement: in `ytdlp` mode every song pauses ~10 s before starting; downloading the next queued song while the current one plays would remove the pause.
 - YouTube breaks downloaders regularly; that is why `auto` mode exists. The fix is usually updating yt-dlp and the YouTube plugin version in `lavalink/application.yml`.
 - Downloading from YouTube breaks its terms of service. That's acceptable for private use, so the bot stays private (no public bot listings).
 
-### Local audio files (milestone 7)
+### Local audio files (milestone 8)
 The fallback for when the big services break: people can play files they already have.
 - **From Discord:** `/play file:<attachment>` uses an attachment option on the slash command, so no message-content intent is needed. Download the file into the library straight away, because Discord CDN URLs expire after about 24 hours.
 - **From the website:** multipart upload (`multer`), for DJs only.
@@ -81,11 +81,14 @@ The fallback for when the big services break: people can play files they already
 - The library is per server; it can be browsed, searched and re-queued from the website and with `/library`.
 - Free Discord users can upload about 10 MB, so larger files go through the website.
 
-## Auth & permissions (milestone 5)
+## Auth & permissions (built in milestone 5)
 
-- OAuth2 scopes: `identify`, `guilds`. Sessions via `express-session` with a SQLite store; cookies set to `httpOnly`, `secure`, `sameSite=lax`.
+- OAuth2 scope: `identify` only. The bot looks up which servers a user is in, and their roles there, itself (see below), so the website never needs to keep a Discord token.
+- Sessions live in a signed cookie (`cookie-session`, signed with `SESSION_SECRET`) holding just the user's id, name and avatar: `httpOnly`, `sameSite=lax`, and `secure` once `PUBLIC_URL` is https. Logins survive bot restarts and no session table is needed. (The original plan was `express-session` with a SQLite store; the cookie is simpler and needs no database.)
 - Add the OAuth2 redirect `<PUBLIC_URL>/api/auth/callback` in the Developer Portal under OAuth2 → Redirects.
-- The dashboard lists servers where the user is a member **and** the bot is present.
+- The dashboard lists servers where the user is a member **and** the bot is present, found by looking the user up in each of the bot's servers.
+- Changes must be sent as JSON; the server refuses anything else (415). Together with `sameSite=lax` this stops other websites from making changes through a logged-in browser.
+- **Until milestone 6** there's no way to set a DJ role, so every member counts as a DJ (`isDj()` in `src/permissions.ts`). Milestone 6 switches to the rule in the Decisions table: the DJ role if one is set, otherwise admins only.
 - Permission levels:
   - **Bot owner** (`OWNER_ID` env): global settings, every server.
   - **Server admin** (Administrator or Manage Server in that server): that server's settings and all controls.
@@ -140,8 +143,8 @@ Possibly needed later:
 - `global_settings(key PRIMARY KEY, value)`
 - `guild_settings(guild_id PRIMARY KEY, dj_role_id, default_volume, max_queue_length, upload_permission, require_same_vc, leave_after_sec, announce_channel_id, ...)`
 - `library_files(id, guild_id, uploaded_by, original_name, path, mime, duration_ms, size_bytes, created_at)`
-- `sessions` (session store)
 - `queue_items(guild_id, position, item_json)`: one row per `QueueItem`
+- `history_items(guild_id, played_at, item_json)`: the "Recently played" list (in memory until then, 20 per server)
 - `player_state(guild_id PRIMARY KEY, voice_channel_id, text_channel_id, current_item_json, position_ms, paused, volume, loop_mode, updated_at)`
 
 ### Queue persistence
@@ -150,6 +153,39 @@ Possibly needed later:
 - **On startup:** load every saved guild. If its saved voice channel still has people in it, rejoin and resume the current track from `position_ms`. Otherwise restore the queue paused and wait for `/resume` or `/play`.
 - Restored items are re-resolved when they play, as usual, so expired URLs don't matter.
 - Nice to have: `lavalink-client` session resuming, so a restart of just the bot process doesn't interrupt audio at all while Lavalink keeps running.
+
+## Playlists (milestone 7)
+
+Saved, per-server playlists, an idea from the owner. They need storage, so they come after the database (milestone 6).
+
+**What people can do:**
+- **Everyone in the server** can browse the server's playlists and add songs to them (on the website, or with `/playlist add`).
+- **DJs** create, rename and delete playlists, and remove songs from them. Members can also remove songs they added themselves.
+- **Playing a playlist (DJ):** "Play" **replaces** the current queue: the current track stops, the queue is cleared, and the playlist's songs are queued in order. The website asks for confirmation first if the queue isn't empty. "Add to queue" appends instead.
+- **Importing a YouTube playlist (DJ):** paste a YouTube playlist link to create a playlist from it (or add its videos to an existing one). `yt-dlp --flat-playlist -J <url>` lists the videos' links, titles and durations in a second or two, without downloading anything. Like everything else, the songs are stored as links and loaded when they play. Cap imports at around 500 songs.
+- **Save the queue as a playlist (DJ):** turns the current track plus the queue into a new playlist.
+- **Pasting a playlist link into "Add a song" or `/play`:** today only the selected video is queued. With playlists built, offer "add all N songs to the queue" for such links too, using the same import.
+- Spotify playlists would need the LavaSrc plugin and Spotify API keys; out of scope.
+
+**Slash commands:** `/playlist list`, `/playlist show <name>`, `/playlist play <name>`, `/playlist add <name> <link>`, `/playlist create <name>`, `/playlist import <name> <youtube-playlist-link>`, `/playlist delete <name>`.
+
+**Data:**
+- `playlists(id, guild_id, name, created_by, created_at)`; name unique per server.
+- `playlist_items(id, playlist_id, position, source_json, title, author, duration_ms, thumbnail, added_by, added_at)`.
+
+**REST API:**
+```
+GET    /guilds/:id/playlists                          (member) names, song counts, total length
+GET    /guilds/:id/playlists/:playlistId              (member) the songs
+POST   /guilds/:id/playlists                          (dj) { name } | { name, importUrl }
+PATCH  /guilds/:id/playlists/:playlistId              (dj) { name }
+DELETE /guilds/:id/playlists/:playlistId              (dj)
+POST   /guilds/:id/playlists/:playlistId/items        (member) { input } | { importUrl }
+DELETE /guilds/:id/playlists/:playlistId/items/:item  (dj, or whoever added it)
+PATCH  /guilds/:id/playlists/:playlistId/items/:item  (dj) { position }
+POST   /guilds/:id/playlists/:playlistId/play         (dj) { mode: "replace" | "append" }
+POST   /guilds/:id/playlists/from-queue               (dj) { name }
+```
 
 ## Real-time (Socket.IO, built in milestone 4)
 - The client sends `guild:watch <id>` and joins the room `guild:<id>`. From milestone 5, the server first checks that the logged-in user is a member of that server.
@@ -164,21 +200,28 @@ Possibly needed later:
 
 `/filter` (added alongside milestone 3, at the owner's request) uses Lavalink's built-in filters: nightcore, vaporwave, bassboost, 8d, karaoke, soft, or off. One effect at a time, kept on the player until changed. The website offers the same list (`AUDIO_FILTERS` in `src/shared/filters.ts`) through `POST /guilds/:id/player/filter { filter }`, which needs DJ permission from milestone 5.
 
-### REST API (under `/api`, session required unless noted)
+### REST API (under `/api`, login required unless noted)
+Built in milestone 5 (member = any member of that server, dj = may control playback):
 ```
-GET    /auth/login                 (no session)
-GET    /auth/callback              (no session)
+GET    /auth/login                 (no login) → Discord's consent page
+GET    /auth/callback              (no login) ← Discord sends the user back here
 POST   /auth/logout
 GET    /me
-GET    /guilds
-GET    /guilds/:id/state
-POST   /guilds/:id/queue           { input: string } | { fileId: string }
-DELETE /guilds/:id/queue/:itemId
-PATCH  /guilds/:id/queue/:itemId   { position: number }
-POST   /guilds/:id/player/skip | pause | resume | stop
-POST   /guilds/:id/player/seek     { positionMs }
-POST   /guilds/:id/player/volume   { volume }
-POST   /guilds/:id/player/filter   { filter }          (built early, before login)
+GET    /guilds                     servers the user shares with the bot, with their level
+GET    /guilds/:id/state           (member)
+POST   /guilds/:id/queue           (dj) { input: string }       ({ fileId } in milestone 8)
+DELETE /guilds/:id/queue/:itemId   (dj)
+PATCH  /guilds/:id/queue/:itemId   (dj) { position: number }    1 = play next
+POST   /guilds/:id/queue/shuffle   (dj)
+POST   /guilds/:id/player/skip | pause | resume | stop   (dj)
+POST   /guilds/:id/player/seek     (dj) { positionMs }
+POST   /guilds/:id/player/volume   (dj) { volume }
+POST   /guilds/:id/player/loop     (dj) { mode }
+POST   /guilds/:id/player/filter   (dj) { filter }
+```
+Planned:
+```
+GET    /guilds/:id/playlists ...   (milestone 7, see "Playlists")
 GET    /guilds/:id/library
 POST   /guilds/:id/library         (multipart upload)
 DELETE /guilds/:id/library/:fileId

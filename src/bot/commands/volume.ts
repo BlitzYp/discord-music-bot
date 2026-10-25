@@ -3,6 +3,7 @@ import { MAX_VOLUME } from "../../player/GuildPlayer.js";
 import type { Command } from "./types.js";
 
 export const volume: Command = {
+  permission: "dj",
   data: new SlashCommandBuilder()
     .setName("volume")
     .setDescription("Show or change the volume")

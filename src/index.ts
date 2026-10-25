@@ -42,6 +42,6 @@ process.once("SIGTERM", () => void shutdown());
 
 await client.login(config.DISCORD_TOKEN);
 // The bot keeps working in Discord even if the website can't start (e.g. the port is taken).
-await startWebServer({ client, players }, config.WEB_PORT).catch((error) =>
+await startWebServer({ client, players, config }).catch((error) =>
   console.error("[web] the website couldn't start:", error instanceof Error ? error.message : error),
 );

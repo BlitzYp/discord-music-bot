@@ -2,6 +2,7 @@ import { SlashCommandBuilder } from "discord.js";
 import type { Command } from "./types.js";
 
 export const stop: Command = {
+  permission: "dj",
   data: new SlashCommandBuilder().setName("stop").setDescription("Stop playback, clear the queue and leave the voice channel"),
 
   async execute(interaction, { players }) {

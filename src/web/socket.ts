@@ -1,30 +1,38 @@
 import type { Server as HttpServer } from "node:http";
+import type { RequestHandler } from "express";
 import { Server } from "socket.io";
+import { getPermissionLevel } from "../permissions.js";
 import { summarizeError } from "../player/errors.js";
 import type { ClientToServerEvents, PlayerSnapshot, PlayerStatus, ServerToClientEvents } from "../shared/types.js";
 import type { WebContext } from "./server.js";
+import { sessionUserOf } from "./session.js";
 
 /** Each server's updates go to its own Socket.IO room, so a browser only receives the server it's watching. */
 const roomFor = (guildId: string) => `guild:${guildId}`;
 
 /**
- * Live updates for the website. The browser says which server it's watching ("guild:watch"); from then on
- * every PlayerManager event for that server is pushed to it. Sockets only push updates: changes (from
- * milestone 5) go through the REST API, so permissions are checked in one place.
+ * Live updates for the website. The browser says which server it's watching ("guild:watch"); after checking
+ * that the logged-in user is a member there, every PlayerManager event for that server is pushed to it.
+ * Sockets only push updates: changes go through the REST API, so permissions are checked in one place.
  */
-export function attachSocket(httpServer: HttpServer, { client, players }: WebContext): void {
+export function attachSocket(httpServer: HttpServer, { client, players }: WebContext, session: RequestHandler): void {
   const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer);
+  // Runs the session middleware on the socket's opening request, so we know who is connected.
+  io.engine.use(session);
 
   io.on("connection", (socket) => {
-    socket.on("guild:watch", (guildId) => {
-      // Milestone 5: also check that the logged-in user is a member of this server.
-      if (typeof guildId !== "string" || !client.guilds.cache.has(guildId)) return;
+    socket.on("guild:watch", async (guildId) => {
+      const user = sessionUserOf(socket.request);
+      const guild = typeof guildId === "string" ? client.guilds.cache.get(guildId) : undefined;
+      if (!user || !guild) return;
+      const level = await getPermissionLevel(guild, user.id);
+      if (!level) return; // not a member of that server
 
       for (const room of socket.rooms) {
         if (room.startsWith("guild:")) void socket.leave(room);
       }
-      void socket.join(roomFor(guildId));
-      socket.emit("state", players.getState(guildId));
+      void socket.join(roomFor(guild.id));
+      socket.emit("state", players.getState(guild.id));
     });
   });
 

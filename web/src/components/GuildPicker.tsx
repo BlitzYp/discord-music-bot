@@ -10,8 +10,8 @@ export function GuildPicker({ guilds, onPick }: Props) {
   if (guilds.length === 0) {
     return (
       <section className="card empty">
-        <p>The bot isn't in any servers yet.</p>
-        <p className="muted">Invite it to a server first (see the README).</p>
+        <p>You and the bot aren't in any server together.</p>
+        <p className="muted">Invite the bot to one of your servers first (see the README).</p>
       </section>
     );
   }

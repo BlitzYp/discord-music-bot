@@ -4,6 +4,7 @@ import { itemAtPosition } from "./positions.js";
 import type { Command } from "./types.js";
 
 export const remove: Command = {
+  permission: "dj",
   data: new SlashCommandBuilder()
     .setName("remove")
     .setDescription("Remove a track from the queue")

@@ -3,6 +3,7 @@ import { AUDIO_FILTERS, type AudioFilter, FILTER_DESCRIPTIONS } from "../../shar
 import type { Command } from "./types.js";
 
 export const filter: Command = {
+  permission: "dj",
   data: new SlashCommandBuilder()
     .setName("filter")
     .setDescription("Add an audio effect like nightcore or bass boost")

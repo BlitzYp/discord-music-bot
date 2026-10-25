@@ -100,6 +100,12 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
     await player.run(() => player.setVolume(volume));
   }
 
+  /** Jumps to a point in the current track (milliseconds from its start). */
+  async seek(guildId: string, positionMs: number): Promise<void> {
+    const player = this.requirePlayer(guildId);
+    await player.run(() => player.seek(positionMs));
+  }
+
   async setLoopMode(guildId: string, mode: LoopMode): Promise<void> {
     const player = this.requirePlayer(guildId);
     await player.run(async () => player.setLoopMode(mode));
@@ -141,6 +147,7 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
       loopMode: "off",
       filter: "off",
       queue: [],
+      history: [],
     };
   }
 

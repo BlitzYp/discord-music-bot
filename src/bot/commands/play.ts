@@ -3,6 +3,7 @@ import { formatItem } from "../format.js";
 import type { Command } from "./types.js";
 
 export const play: Command = {
+  permission: "dj",
   data: new SlashCommandBuilder()
     .setName("play")
     .setDescription("Play a link or add it to the queue")

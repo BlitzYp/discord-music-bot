@@ -2,6 +2,7 @@ import { SlashCommandBuilder } from "discord.js";
 import type { Command } from "./types.js";
 
 export const pause: Command = {
+  permission: "dj",
   data: new SlashCommandBuilder().setName("pause").setDescription("Pause the current track"),
 
   async execute(interaction, { players }) {

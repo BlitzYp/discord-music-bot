@@ -9,6 +9,7 @@ const DESCRIPTIONS: Record<LoopMode, string> = {
 };
 
 export const loop: Command = {
+  permission: "dj",
   data: new SlashCommandBuilder()
     .setName("loop")
     .setDescription("Repeat the current track or the whole queue")

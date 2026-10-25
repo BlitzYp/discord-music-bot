@@ -1,5 +1,6 @@
 import type { Player, Track, TrackEndReason } from "lavalink-client";
 import { playbackRate } from "../shared/filters.js";
+import { MAX_VOLUME } from "../shared/player.js";
 import type { AudioFilter, LoopMode, PlayerSnapshot, QueueItem } from "../shared/types.js";
 import { UserError } from "./errors.js";
 import { applyFilter } from "./filters.js";
@@ -15,7 +16,9 @@ interface StartOptions {
 
 /** Volume for a newly joined player, in percent. Becomes the per-server `defaultVolume` setting in milestone 6. */
 const DEFAULT_VOLUME = 100;
-export const MAX_VOLUME = 150;
+export { MAX_VOLUME };
+/** How many recently played items to remember. */
+const HISTORY_SIZE = 20;
 
 /**
  * The playback state of one Discord server: what's playing now and what's queued after it.
@@ -33,6 +36,8 @@ export class GuildPlayer {
   current: QueueItem | null = null;
   /** Items waiting to play, in order. Does not include `current`. */
   queue: QueueItem[] = [];
+  /** Recently played items, newest first (at most HISTORY_SIZE). Kept in memory until milestone 6 saves it. */
+  history: QueueItem[] = [];
   loopMode: LoopMode = "off";
   filter: AudioFilter = "off";
 
@@ -158,6 +163,7 @@ export class GuildPlayer {
     if (!skipped) return null;
 
     this.manager.emit("track:end", this.guildId, skipped, "skipped");
+    this.addToHistory(skipped);
     if (this.loopMode === "queue") this.queue.push(skipped);
     await this.playNext();
     return skipped;
@@ -191,6 +197,20 @@ export class GuildPlayer {
     const player = this.lavalinkPlayer;
     if (!player) throw new UserError("Not connected to a voice channel.");
     await player.setVolume(volume);
+    this.emitPlayerUpdate();
+  }
+
+  /** Jumps to a point in the current track, in milliseconds from its start. */
+  async seek(positionMs: number): Promise<void> {
+    const player = this.requirePlaying();
+    const item = this.current!;
+    if (item.isStream || !player.queue.current?.info.isSeekable) throw new UserError("This track can't be seeked.");
+    if (!Number.isFinite(positionMs) || positionMs < 0) throw new UserError("The position must be 0 or more.");
+
+    const target = Math.min(Math.round(positionMs), item.durationMs ?? positionMs);
+    await player.seek(target);
+    // After a seek, Lavalink's position and the song's position agree again (see `speedAnchor`).
+    this.speedAnchor = { lavalinkMs: target, songMs: target };
     this.emitPlayerUpdate();
   }
 
@@ -287,6 +307,7 @@ export class GuildPlayer {
     }
 
     this.manager.emit("track:end", this.guildId, ended, reason);
+    if (playedToTheEnd) this.addToHistory(ended);
 
     if (playedToTheEnd && this.loopMode === "track") {
       const replayed = await this.tryToPlay(ended);
@@ -318,7 +339,7 @@ export class GuildPlayer {
     return false;
   }
 
-  /** Forgets the current track and the queue, e.g. after the bot was disconnected from voice. */
+  /** Forgets the current track and the queue, e.g. after the bot was disconnected from voice. The history stays. */
   reset(): void {
     this.setCurrent(null, null);
     this.queue = [];
@@ -342,6 +363,7 @@ export class GuildPlayer {
       loopMode: this.loopMode,
       filter: this.filter,
       queue: [...this.queue],
+      history: [...this.history],
     };
   }
 
@@ -425,6 +447,13 @@ export class GuildPlayer {
     const index = this.queue.findIndex((item) => item.id === itemId);
     if (index === -1) throw new UserError("That item isn't in the queue any more.");
     return index;
+  }
+
+  /** Remembers a track that played (to the end, or until skipped). A track looping on repeat is listed once. */
+  private addToHistory(item: QueueItem): void {
+    if (this.history[0]?.id === item.id) return;
+    this.history.unshift(item);
+    this.history.length = Math.min(this.history.length, HISTORY_SIZE);
   }
 
   private emitQueueUpdate(): void {

@@ -1,33 +1,39 @@
-import { type Guild } from "discord.js";
 import { Router } from "express";
+import { getPermissionLevel } from "../../permissions.js";
 import type { GuildSummary } from "../../shared/types.js";
+import { requireGuildAccess, requireUser } from "../access.js";
+import { route } from "../http.js";
 import type { WebContext } from "../server.js";
 
-/**
- * Read-only routes for servers and their playback state.
- * No login yet (milestone 5), so this lists every server the bot is in; the web server only listens on
- * localhost until then.
- */
+/** Read-only routes: the servers the user can see, and their playback state. */
 export function guildRoutes({ client, players }: WebContext): Router {
   const router = Router();
 
-  router.get("/guilds", (_req, res) => {
-    const guilds: GuildSummary[] = client.guilds.cache.map(toSummary);
-    guilds.sort((a, b) => a.name.localeCompare(b.name));
-    res.json(guilds);
-  });
+  /** Servers that both the logged-in user and the bot are in, with what the user may do in each. */
+  router.get(
+    "/guilds",
+    route(async (req, res) => {
+      const user = requireUser(req);
+      const guilds = [...client.guilds.cache.values()];
+      const levels = await Promise.all(guilds.map((guild) => getPermissionLevel(guild, user.id)));
 
-  router.get("/guilds/:id/state", (req, res) => {
-    if (!client.guilds.cache.has(req.params.id)) {
-      res.status(404).json({ error: "The bot isn't in that server." });
-      return;
-    }
-    res.json(players.getState(req.params.id));
-  });
+      const visible: GuildSummary[] = [];
+      guilds.forEach((guild, index) => {
+        const level = levels[index];
+        if (level) visible.push({ id: guild.id, name: guild.name, iconUrl: guild.iconURL({ size: 64 }), level });
+      });
+      visible.sort((a, b) => a.name.localeCompare(b.name));
+      res.json(visible);
+    }),
+  );
+
+  router.get(
+    "/guilds/:id/state",
+    route(async (req, res) => {
+      const { guild } = await requireGuildAccess(req, client, "member");
+      res.json(players.getState(guild.id));
+    }),
+  );
 
   return router;
-}
-
-function toSummary(guild: Guild): GuildSummary {
-  return { id: guild.id, name: guild.name, iconUrl: guild.iconURL({ size: 64 }) };
 }

@@ -1,14 +1,29 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { UserError } from "../player/errors.js";
 
+/** An error with an HTTP status, e.g. 401 (not logged in), 403 (not allowed) or 404 (no such server). */
+export class HttpError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
 /**
  * Wraps an async route handler so errors become proper HTTP answers:
- * a UserError is the user's mistake or something they should know (400, with its message);
- * anything else is unexpected (500, details in the console only).
+ * - HttpError: its status and message.
+ * - UserError: 400 with its message (the user's mistake, or something they should know).
+ * - anything else: 500, with the details in the console only.
  */
 export function route(handler: (req: Request, res: Response) => Promise<void>): RequestHandler {
   return (req: Request, res: Response, _next: NextFunction) => {
     handler(req, res).catch((error: unknown) => {
+      if (error instanceof HttpError) {
+        res.status(error.status).json({ error: error.message });
+        return;
+      }
       if (error instanceof UserError) {
         res.status(400).json({ error: error.message });
         return;
@@ -18,3 +33,17 @@ export function route(handler: (req: Request, res: Response) => Promise<void>): 
     });
   };
 }
+
+/**
+ * Refuses changes (POST, PATCH, DELETE) that aren't sent as JSON. Browsers only let a page send JSON to another
+ * site after a CORS check, which this server never passes, so other websites can't make changes through a
+ * logged-in user's browser. (The session cookie's `sameSite: "lax"` already blocks that; this is a second lock.)
+ */
+export const requireJsonForChanges: RequestHandler = (req, res, next) => {
+  const isChange = req.method === "POST" || req.method === "PATCH" || req.method === "DELETE";
+  if (isChange && !req.is("application/json")) {
+    res.status(415).json({ error: "Send the request body as JSON." });
+    return;
+  }
+  next();
+};

@@ -52,6 +52,8 @@ Lavalink tells the bot when a track ends, and why. `PlayerManager.listenToLavali
 
 `/skip` drops the current item, or, in `queue` loop mode, moves it to the end of the queue. Every new track starts unpaused, because Lavalink would otherwise stay paused across a skip.
 
+Tracks that played to the end or were skipped go into `GuildPlayer.history` (newest first, the last 20; a track on repeat is listed once). Tracks that failed don't. The website shows it as "Recently played". It survives `/stop`, but not a bot restart until milestone 6 saves it.
+
 ## Lavalink first, yt-dlp as the backup
 
 There are two ways to turn a link into something Lavalink can play (`src/player/resolvers/`):
@@ -107,24 +109,49 @@ The website runs inside the bot's own process (`src/web/`), so it reads the same
 
 | Part | File | Job |
 |---|---|---|
-| REST API | `src/web/routes/guilds.ts` | `GET /api/guilds` (the server list) and `GET /api/guilds/:id/state` (a snapshot) |
+| REST API | `src/web/routes/` | `auth.ts` (login), `guilds.ts` (your servers, a server's state), `player.ts` (the controls) |
 | Socket.IO | `src/web/socket.ts` | Pushes every change to the browsers watching that server |
 | The React app | `src/web/frontend.ts` | Serves `web/`: through Vite when running from source (`npm run dev`, instant reloads), or the built `web/dist/` with `npm start` |
 
 How the page stays live:
 
 1. The browser opens a Socket.IO connection and sends `guild:watch` with the server's id (`web/src/useGuildState.ts`).
-2. `socket.ts` puts that connection in the room `guild:<id>` and answers with `state`, a full `PlayerSnapshot`.
+2. `socket.ts` checks that the logged-in user is a member of that server, puts the connection in the room `guild:<id>`, and answers with `state`, a full `PlayerSnapshot`.
 3. From then on, every `PlayerManager` event for that server is forwarded to the room: `queue:update` (with a full snapshot) whenever the current track or the queue changes, and `player:update` (position, paused, volume, loop mode, filter) whenever those change and about once a second while playing.
 4. Between updates, `NowPlaying` keeps the progress bar moving by counting up from the last position.
 
 The message types are defined once in `src/shared/types.ts` (`ServerToClientEvents`, `ClientToServerEvents`), and both sides import them, so the TypeScript compiler catches it if the bot and the website disagree. The website imports shared code through `web/src/shared.ts`.
 
-Changes from the website go through REST routes, never the socket, so permissions will be checked in one place. The first one is `POST /api/guilds/:id/player/filter` (`src/web/routes/player.ts`, used by `web/src/components/EffectPicker.tsx`). The page doesn't apply the change itself: it waits for the socket's `player:update`, exactly as if someone had used `/filter` in Discord, so the two can't disagree.
+Changes from the website go through REST routes (`src/web/routes/player.ts`), never the socket, so permissions are checked in one place. Buttons call the functions in `web/src/api.ts`. The page doesn't apply a change itself: it waits for the socket's update, exactly as if someone had used the slash command in Discord, so the two can't disagree.
 
-`src/web/http.ts` has `route()`, a wrapper for async route handlers: a `UserError` becomes a 400 answer with its message, anything else a 500 with the details logged to the console. Request bodies must be JSON (`express.json()`), which also stops other websites from posting to the bot through your browser.
+`src/web/http.ts` has `route()`, a wrapper for async route handlers: an `HttpError` becomes its status (401, 403, 404…), a `UserError` becomes 400 with its message, anything else a 500 with the details logged to the console.
 
-Until login exists (milestone 5), the server listens on `127.0.0.1` only. Milestone 5 must add the login and DJ-role check in front of every route in `routes/player.ts`.
+The server still listens on `127.0.0.1` only. Making it public is milestone 9; logins and permissions are already in place for that.
+
+## Login and permissions
+
+**Logging in** (`src/web/routes/auth.ts`) uses Discord's OAuth2 with only the `identify` scope:
+
+1. "Log in with Discord" goes to `GET /api/auth/login`, which saves a random `state` in the cookie and sends the browser to Discord's consent page.
+2. Discord sends the browser back to `GET /api/auth/callback` with a one-time `code` and the same `state`. A different `state` means the link didn't come from our login, and is refused.
+3. The bot swaps the code for an access token, asks Discord who the user is, and stores the user's id, name and avatar in the session cookie. The token is then thrown away.
+
+**The session** (`src/web/session.ts`) is a cookie signed with `SESSION_SECRET`: anyone can read it, but nobody can change it without the secret, and a forged one is ignored. It holds nothing secret, so a cookie is enough; that also means logins survive bot restarts.
+
+**Permission levels** (`src/permissions.ts`, with the level names in `src/shared/permissions.ts`):
+
+| Level | Who | May |
+|---|---|---|
+| owner | `OWNER_ID` | everything, in every server |
+| admin | Administrator or Manage Server | settings (milestone 6) and all controls |
+| dj | the DJ role (milestone 6); **for now every member** | control playback |
+| member | anyone in the server | look |
+
+- **Slash commands** declare a `permission` (`src/bot/commands/*.ts`), checked in `bot/events/interactionCreate.ts` using the member Discord sends with the command.
+- **Web routes** start with `requireGuildAccess(req, client, level)` (`src/web/access.ts`). It answers 401 if nobody is logged in, 404 if the user (or the bot) isn't in that server, and 403 if their level is too low. It looks the member up through Discord's API (no privileged intent needed), cached for 30 seconds, so a role change takes up to 30 s to apply on the website.
+- **The socket** only lets a browser watch a server whose member is logged in.
+- **The website** shows controls only to DJs (`hasLevel(guild.level, "dj")`), but that's just convenience: every change is checked again on the server.
+- Changes must be JSON (`requireJsonForChanges`), and the cookie is `sameSite=lax`. Together these stop another website from making changes through your logged-in browser.
 
 **To show something new on the page:** if the information is already in `PlayerSnapshot`, just use it in a component in `web/src/components/`. If not, add it to `PlayerSnapshot` in `src/shared/types.ts`, fill it in `GuildPlayer.snapshot()` (and `PlayerManager.getState()` for servers with no player yet), and the compiler will point at anything else that needs updating.
 
@@ -167,6 +194,7 @@ import { SlashCommandBuilder } from "discord.js";
 import type { Command } from "./types.js";
 
 export const clear: Command = {
+  permission: "dj", // who may use it: "member", "dj", "admin" or "owner" (see "Login and permissions")
   data: new SlashCommandBuilder().setName("clear").setDescription("Empty the queue (the current track keeps playing)"),
 
   async execute(interaction, { players }) {
@@ -183,7 +211,8 @@ Restart the bot (`npm run dev` does this on save). Commands are registered with 
 Things to keep in mind:
 - If the command might take more than a couple of seconds (anything that loads a link), call `await interaction.deferReply()` first and answer with `editReply` instead of `reply`.
 - Command names must be lowercase, with no spaces.
-- Keep Discord-specific code (replies, embeds) in the command and playback logic in `GuildPlayer`/`PlayerManager`, so the website can reuse the same methods later.
+- Keep Discord-specific code (replies, embeds) in the command and playback logic in `GuildPlayer`/`PlayerManager`, so the website can reuse the same methods.
+- To offer it on the website too, add a route in `src/web/routes/player.ts` (one `djRoute(...)` line calling the same `PlayerManager` method), a function in `web/src/api.ts`, and a button in a component.
 
 ## Configuration files
 

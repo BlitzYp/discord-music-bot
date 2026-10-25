@@ -1,14 +1,20 @@
-import { formatDuration, type PlayerSnapshot, playbackRate } from "../shared";
+import * as api from "../api";
+import { type PlayerSnapshot, playbackRate } from "../shared";
 import { useNow } from "../useNow";
+import { PlayerControls } from "./PlayerControls";
+import { SeekBar } from "./SeekBar";
 
 interface Props {
+  guildId: string;
   snapshot: PlayerSnapshot;
   /** When `snapshot.positionMs` was received; the position keeps counting up from there while playing. */
   receivedAt: number;
+  /** Whether the user is a DJ (shows the controls). */
+  canControl: boolean;
 }
 
-/** The current track: artwork, title, who asked for it, a progress bar, and the player's settings. */
-export function NowPlaying({ snapshot, receivedAt }: Props) {
+/** The current track: artwork, title, who asked for it, the progress bar, and (for DJs) the controls. */
+export function NowPlaying({ guildId, snapshot, receivedAt, canControl }: Props) {
   const now = useNow(500);
   const item = snapshot.current;
 
@@ -16,7 +22,7 @@ export function NowPlaying({ snapshot, receivedAt }: Props) {
     return (
       <section className="card now-playing empty">
         <p>Nothing is playing.</p>
-        <p className="muted">Use /play in Discord to start some music.</p>
+        <p className="muted">{canControl ? "Add a link above, or use /play in Discord." : "Use /play in Discord to start some music."}</p>
       </section>
     );
   }
@@ -24,44 +30,48 @@ export function NowPlaying({ snapshot, receivedAt }: Props) {
   // The bot sends the position about once a second; in between, count up from the last value.
   // Nightcore and vaporwave play the song faster or slower, so the bar has to move faster or slower too.
   const elapsedSinceUpdate = snapshot.paused ? 0 : (now - receivedAt) * playbackRate(snapshot.filter);
-  const duration = item.durationMs;
-  const position = Math.min(snapshot.positionMs + elapsedSinceUpdate, duration ?? Infinity);
-  const progressPercent = duration ? (position / duration) * 100 : 0;
+  const position = Math.min(snapshot.positionMs + elapsedSinceUpdate, item.durationMs ?? Infinity);
   const link = item.source.kind === "file" ? undefined : item.source.url;
 
   return (
     <section className="card now-playing">
-      {item.thumbnail ? <img className="artwork" src={item.thumbnail} alt="" /> : <div className="artwork placeholder">♪</div>}
+      <div className="track">
+        {item.thumbnail ? <img className="artwork" src={item.thumbnail} alt="" /> : <div className="artwork placeholder">♪</div>}
 
-      <div className="details">
-        <p className="label">{snapshot.paused ? "Paused" : "Now playing"}</p>
-        <h2 className="title">
-          {link ? (
-            <a href={link} target="_blank" rel="noreferrer">
-              {item.title}
-            </a>
-          ) : (
-            item.title
-          )}
-        </h2>
-        <p className="muted">
-          {item.author ? `${item.author} · ` : ""}requested by {item.requestedBy.name}
-        </p>
+        <div className="details">
+          <p className="label">{snapshot.paused ? "Paused" : "Now playing"}</p>
+          <h2 className="title">
+            {link ? (
+              <a href={link} target="_blank" rel="noreferrer">
+                {item.title}
+              </a>
+            ) : (
+              item.title
+            )}
+          </h2>
+          <p className="muted">
+            {item.author ? `${item.author} · ` : ""}requested by {item.requestedBy.name}
+          </p>
 
-        <div className="progress">
-          <span>{formatDuration(position)}</span>
-          <div className="bar" role="progressbar" aria-valuenow={Math.round(progressPercent)}>
-            <div className="fill" style={{ width: `${progressPercent}%` }} />
-          </div>
-          <span>{formatDuration(duration, item.isStream)}</span>
+          <SeekBar
+            positionMs={position}
+            durationMs={item.durationMs}
+            isStream={item.isStream}
+            canSeek={canControl && !item.isStream}
+            onSeek={async (positionMs) => {
+              await api.seek(guildId, positionMs).catch(() => {}); // a failed seek just snaps back
+            }}
+          />
+
+          <ul className="badges">
+            <li>Volume {snapshot.volume}%</li>
+            {snapshot.loopMode !== "off" && <li>Looping {snapshot.loopMode}</li>}
+            {snapshot.filter !== "off" && <li className="effect">Effect: {snapshot.filter}</li>}
+          </ul>
         </div>
-
-        <ul className="badges">
-          <li>Volume {snapshot.volume}%</li>
-          {snapshot.loopMode !== "off" && <li>Looping {snapshot.loopMode}</li>}
-          {snapshot.filter !== "off" && <li className="effect">Effect: {snapshot.filter}</li>}
-        </ul>
       </div>
+
+      {canControl && <PlayerControls guildId={guildId} snapshot={snapshot} />}
     </section>
   );
 }
