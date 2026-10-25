@@ -1,4 +1,5 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
+import type { z } from "zod";
 import { UserError } from "../player/errors.js";
 
 /** An error with an HTTP status, e.g. 401 (not logged in), 403 (not allowed) or 404 (no such server). */
@@ -47,3 +48,14 @@ export const requireJsonForChanges: RequestHandler = (req, res, next) => {
   }
   next();
 };
+
+/**
+ * Checks a request body with a zod schema. A mistake becomes a 400 answer naming the setting, e.g.
+ * "defaultVolume: Too big: expected number to be <=150".
+ */
+export function parseBody<T>(schema: z.ZodType<T>, body: unknown): T {
+  const result = schema.safeParse(body);
+  if (result.success) return result.data;
+  const issue = result.error.issues[0]!;
+  throw new UserError(issue.path.length > 0 ? `${issue.path.join(".")}: ${issue.message}` : issue.message);
+}

@@ -39,7 +39,7 @@ export function NowPlaying({ guildId, snapshot, receivedAt, canControl }: Props)
         {item.thumbnail ? <img className="artwork" src={item.thumbnail} alt="" /> : <div className="artwork placeholder">♪</div>}
 
         <div className="details">
-          <p className="label">{snapshot.paused ? "Paused" : "Now playing"}</p>
+          <p className="label">{snapshot.interrupted ? "Stopped by a restart" : snapshot.paused ? "Paused" : "Now playing"}</p>
           <h2 className="title">
             {link ? (
               <a href={link} target="_blank" rel="noreferrer">
@@ -57,11 +57,18 @@ export function NowPlaying({ guildId, snapshot, receivedAt, canControl }: Props)
             positionMs={position}
             durationMs={item.durationMs}
             isStream={item.isStream}
-            canSeek={canControl && !item.isStream}
+            canSeek={canControl && !item.isStream && !snapshot.interrupted}
             onSeek={async (positionMs) => {
               await api.seek(guildId, positionMs).catch(() => {}); // a failed seek just snaps back
             }}
           />
+
+          {snapshot.interrupted && (
+            <p className="hint">
+              The bot restarted while this was playing. {canControl ? "Press Resume" : "A DJ can use /resume"} to continue from
+              here (the bot joins {canControl ? "your" : "their"} voice channel).
+            </p>
+          )}
 
           <ul className="badges">
             <li>Volume {snapshot.volume}%</li>

@@ -43,6 +43,11 @@ export interface PlayerSnapshot {
   current: QueueItem | null;
   positionMs: number;
   paused: boolean;
+  /**
+   * The bot restarted while `current` was playing, and it hasn't been continued yet: /resume (or the website's
+   * Resume button) or /play continues it from `positionMs`, in the voice channel of whoever does it.
+   */
+  interrupted: boolean;
   volume: number;
   loopMode: LoopMode;
   filter: AudioFilter;
@@ -64,6 +69,11 @@ export interface SessionUser {
   /** The display name (Discord's "global name"), falling back to the username. */
   name: string;
   avatarUrl: string;
+}
+
+/** GET /api/me: the logged-in user, and whether they're the bot owner (who gets the Admin page). */
+export interface CurrentUser extends SessionUser {
+  isOwner: boolean;
 }
 
 /** A server shown in the website's server list (GET /api/guilds): one the user and the bot are both in. */

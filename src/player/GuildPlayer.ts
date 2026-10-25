@@ -1,6 +1,8 @@
 import type { Player, Track, TrackEndReason } from "lavalink-client";
+import type { SavedPlayer } from "../db/playerStateStore.js";
 import { playbackRate } from "../shared/filters.js";
 import { MAX_VOLUME } from "../shared/player.js";
+import type { YoutubeMode } from "../shared/settings.js";
 import type { AudioFilter, LoopMode, PlayerSnapshot, QueueItem } from "../shared/types.js";
 import { UserError } from "./errors.js";
 import { applyFilter } from "./filters.js";
@@ -14,8 +16,22 @@ interface StartOptions {
   startAtMs?: number;
 }
 
-/** Volume for a newly joined player, in percent. Becomes the per-server `defaultVolume` setting in milestone 6. */
-const DEFAULT_VOLUME = 100;
+/**
+ * A track that was playing when the bot stopped (a restart or a crash), and hasn't been continued yet.
+ * See `GuildPlayer.interrupted`.
+ */
+export interface InterruptedPlayback {
+  /** Where the track had got to, in song time. */
+  positionMs: number;
+  /** The volume to rejoin with. */
+  volume: number;
+  /** Whether it was paused. A paused track isn't continued automatically, only with /resume or /play. */
+  wasPaused: boolean;
+  /** Where the bot was in voice, and where it posted errors. */
+  voiceChannelId: string | null;
+  textChannelId: string | null;
+}
+
 export { MAX_VOLUME };
 /** How many recently played items to remember. */
 const HISTORY_SIZE = 20;
@@ -36,10 +52,17 @@ export class GuildPlayer {
   current: QueueItem | null = null;
   /** Items waiting to play, in order. Does not include `current`. */
   queue: QueueItem[] = [];
-  /** Recently played items, newest first (at most HISTORY_SIZE). Kept in memory until milestone 6 saves it. */
+  /** Recently played items, newest first (at most HISTORY_SIZE). */
   history: QueueItem[] = [];
   loopMode: LoopMode = "off";
   filter: AudioFilter = "off";
+
+  /**
+   * Set after a restart when a track was playing: `current` is that track, but Lavalink isn't playing it and
+   * the bot isn't in voice. The next `ensureConnected()` (from /resume, /play, or the bot rejoining by itself
+   * because people are still in its channel) continues it from where it stopped. See `restore()`.
+   */
+  interrupted: InterruptedPlayback | null = null;
 
   /** The tail of the task queue used by `run()`. */
   private lastTask: Promise<unknown> = Promise.resolve();
@@ -100,7 +123,10 @@ export class GuildPlayer {
   // Joining voice and adding to the queue
   // ---------------------------------------------------------------------------------------------
 
-  /** Joins the given voice channel if the bot isn't connected yet. If it already is, it stays where it is. */
+  /**
+   * Joins the given voice channel if the bot isn't connected yet. If it already is, it stays where it is.
+   * After a restart, joining also continues the interrupted track (see `interrupted`).
+   */
   async ensureConnected(voiceChannelId: string | null, textChannelId: string | null): Promise<Player> {
     const existing = this.lavalinkPlayer;
     if (existing?.connected) return existing;
@@ -112,11 +138,15 @@ export class GuildPlayer {
       this.manager.lavalink.createPlayer({
         guildId: this.guildId,
         voiceChannelId,
-        textChannelId: textChannelId ?? undefined,
+        // From the website there's no text channel; after a restart, keep posting where playback was started.
+        textChannelId: textChannelId ?? this.interrupted?.textChannelId ?? undefined,
         selfDeaf: true,
-        volume: DEFAULT_VOLUME,
+        volume: this.interrupted?.volume ?? this.manager.settings.guild(this.guildId).defaultVolume,
       });
     await player.connect();
+    // A new Lavalink player has no effect on. `filter` is only set at this point when it was restored after a restart.
+    if (this.filter !== "off") await applyFilter(player, this.filter);
+    if (this.interrupted) await this.continueInterrupted();
     return player;
   }
 
@@ -131,6 +161,10 @@ export class GuildPlayer {
    */
   async enqueue(item: QueueItem, loadedTrack?: Track): Promise<{ position: number }> {
     if (this.current) {
+      const { maxQueueLength } = this.manager.settings.guild(this.guildId);
+      if (maxQueueLength !== null && this.queue.length >= maxQueueLength) {
+        throw new UserError(`The queue is full (this server's limit is ${maxQueueLength} songs).`);
+      }
       this.queue.push(item);
       this.emitQueueUpdate();
       return { position: this.queue.length };
@@ -165,6 +199,14 @@ export class GuildPlayer {
     this.manager.emit("track:end", this.guildId, skipped, "skipped");
     this.addToHistory(skipped);
     if (this.loopMode === "queue") this.queue.push(skipped);
+
+    if (this.interrupted) {
+      // Not in voice, so nothing can play: the next item waits to be continued, from its start.
+      const next = this.queue.shift() ?? null;
+      this.interrupted = next ? { ...this.interrupted, positionMs: 0 } : null;
+      this.setCurrent(next, null);
+      return skipped;
+    }
     await this.playNext();
     return skipped;
   }
@@ -182,7 +224,15 @@ export class GuildPlayer {
     this.emitPlayerUpdate();
   }
 
-  async resume(): Promise<void> {
+  /**
+   * Resumes the paused track. After a restart it continues the interrupted track instead, joining the
+   * requester's voice channel (`voiceChannelId`) to do so.
+   */
+  async resume(voiceChannelId: string | null, textChannelId: string | null): Promise<void> {
+    if (this.interrupted) {
+      await this.ensureConnected(voiceChannelId, textChannelId);
+      return;
+    }
     const player = this.requirePlaying();
     if (!player.paused) throw new UserError("Not paused.");
     await player.resume();
@@ -194,8 +244,7 @@ export class GuildPlayer {
     if (!Number.isInteger(volume) || volume < 0 || volume > MAX_VOLUME) {
       throw new UserError(`Volume must be a whole number from 0 to ${MAX_VOLUME}.`);
     }
-    const player = this.lavalinkPlayer;
-    if (!player) throw new UserError("Not connected to a voice channel.");
+    const player = this.requireConnected();
     await player.setVolume(volume);
     this.emitPlayerUpdate();
   }
@@ -221,8 +270,7 @@ export class GuildPlayer {
 
   /** Switches to an audio effect ("off" removes it). It stays on for the following tracks until changed. */
   async setFilter(filter: AudioFilter): Promise<void> {
-    const player = this.lavalinkPlayer;
-    if (!player) throw new UserError("Not connected to a voice channel.");
+    const player = this.requireConnected();
 
     const songMs = this.songPositionMs(); // measured at the old speed, before switching
     await applyFilter(player, filter);
@@ -331,7 +379,7 @@ export class GuildPlayer {
    */
   onTrackError(): boolean {
     if (!this.current || !this.currentMethod) return true;
-    const method = fallbackMethod(this.current.source, this.currentMethod);
+    const method = fallbackMethod(this.current.source, this.currentMethod, this.youtubeMode());
     if (!method) return true;
 
     this.pendingRetry = { method, fromMs: this.songPositionMs() };
@@ -345,25 +393,70 @@ export class GuildPlayer {
     this.queue = [];
     this.loopMode = "off";
     this.filter = "off"; // a new Lavalink player starts without effects
+    this.interrupted = null;
     this.advanceAfterStuckTrack = false;
     this.pendingRetry = null;
     this.emitQueueUpdate();
   }
 
+  /**
+   * Takes over the state saved before a restart (see PlayerStateStore). A track that was playing becomes
+   * `interrupted`: it continues once the bot is back in voice. Called once, right after the player is created.
+   */
+  restore(saved: SavedPlayer): void {
+    this.current = saved.current;
+    this.queue = saved.queue;
+    this.history = saved.history;
+    this.loopMode = saved.loopMode;
+    this.filter = saved.filter;
+    this.interrupted = saved.current
+      ? {
+          positionMs: saved.positionMs,
+          volume: saved.volume,
+          wasPaused: saved.paused,
+          voiceChannelId: saved.voiceChannelId,
+          textChannelId: saved.textChannelId,
+        }
+      : null;
+  }
+
   /** A copy of the current state, safe to send to Discord or the website. */
   snapshot(): PlayerSnapshot {
     const player = this.lavalinkPlayer;
+    const interrupted = this.interrupted;
     return {
       guildId: this.guildId,
       voiceChannelId: this.voiceChannelId,
       current: this.current,
-      positionMs: this.current ? this.songPositionMs() : 0,
-      paused: player?.paused ?? false,
-      volume: player?.volume ?? DEFAULT_VOLUME,
+      positionMs: interrupted ? interrupted.positionMs : this.current ? this.songPositionMs() : 0,
+      paused: interrupted ? true : (player?.paused ?? false),
+      interrupted: interrupted !== null,
+      volume: interrupted?.volume ?? player?.volume ?? this.manager.settings.guild(this.guildId).defaultVolume,
       loopMode: this.loopMode,
       filter: this.filter,
       queue: [...this.queue],
       history: [...this.history],
+    };
+  }
+
+  /** What to save so playback can continue after a restart. */
+  private savedState(): SavedPlayer {
+    const snapshot = this.snapshot();
+    const player = this.lavalinkPlayer;
+    const interrupted = this.interrupted;
+    return {
+      guildId: this.guildId,
+      // While still interrupted, keep the channels saved before, so a second restart can rejoin there too.
+      voiceChannelId: interrupted ? interrupted.voiceChannelId : (player?.voiceChannelId ?? null),
+      textChannelId: interrupted ? interrupted.textChannelId : (player?.textChannelId ?? null),
+      current: snapshot.current,
+      positionMs: snapshot.positionMs,
+      paused: interrupted ? interrupted.wasPaused : snapshot.paused,
+      volume: snapshot.volume,
+      loopMode: snapshot.loopMode,
+      filter: snapshot.filter,
+      queue: snapshot.queue,
+      history: snapshot.history,
     };
   }
 
@@ -407,6 +500,7 @@ export class GuildPlayer {
   private async startItem(item: QueueItem, options: StartOptions = {}): Promise<void> {
     this.setCurrent(item, null);
     const { track, method } = await resolvePlayable(this.manager.lavalink, item.source, item.requestedBy, {
+      youtubeMode: this.youtubeMode(),
       only: options.method,
     });
     this.currentMethod = method;
@@ -438,9 +532,33 @@ export class GuildPlayer {
 
   /** The Lavalink player, if something is playing. Throws "Nothing is playing" otherwise. */
   private requirePlaying(): Player {
-    const player = this.lavalinkPlayer;
-    if (!this.current || !player) throw new UserError("Nothing is playing.");
+    const player = this.requireConnected();
+    if (!this.current) throw new UserError("Nothing is playing.");
     return player;
+  }
+
+  /** The Lavalink player, if the bot is in voice. Throws a message saying what to do otherwise. */
+  private requireConnected(): Player {
+    if (this.interrupted) throw new UserError("Playback stopped when the bot restarted. Use /resume to continue.");
+    const player = this.lavalinkPlayer;
+    if (!player) throw new UserError("Not connected to a voice channel.");
+    return player;
+  }
+
+  /**
+   * Plays the track that was interrupted by a restart, from where it stopped. If it can't be loaded any more,
+   * the queue moves on. Called by `ensureConnected()` once the bot is back in voice.
+   */
+  private async continueInterrupted(): Promise<void> {
+    const { positionMs } = this.interrupted!;
+    this.interrupted = null;
+    const started = await this.tryToPlay(this.current!, { startAtMs: positionMs });
+    if (!started) await this.playNext();
+  }
+
+  /** The owner's YouTube setting, read every time so a change applies to the next song. */
+  private youtubeMode(): YoutubeMode {
+    return this.manager.settings.global().youtubeMode;
   }
 
   private findQueueIndex(itemId: string): number {
@@ -456,11 +574,18 @@ export class GuildPlayer {
     this.history.length = Math.min(this.history.length, HISTORY_SIZE);
   }
 
+  /** Saves the whole state and tells everyone that the track or the queue changed. */
   private emitQueueUpdate(): void {
+    this.manager.saveState(this.savedState());
     this.manager.emit("queue:update", this.guildId, this.snapshot());
   }
 
-  private emitPlayerUpdate(): void {
+  /**
+   * Saves the position, pause, volume, loop mode and effect, and tells everyone they changed. PlayerManager
+   * also calls this about once a second while playing, so a crash loses at most a second or so of position.
+   */
+  emitPlayerUpdate(): void {
+    this.manager.saveStatus(this.savedState());
     this.manager.emit("player:update", this.guildId, this.snapshot());
   }
 }

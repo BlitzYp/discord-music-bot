@@ -13,7 +13,7 @@ const LOOP_MODES: readonly LoopMode[] = ["off", "track", "queue"];
  * Playback controls for the website. Like slash commands, each one only checks permission, reads its input,
  * and calls PlayerManager. Every route answers with the new state; the page also gets it through the socket.
  */
-export function playerRoutes({ client, players }: WebContext): Router {
+export function playerRoutes({ client, players, settings }: WebContext): Router {
   const router = Router();
 
   /** Registers a DJ-only POST/PATCH/DELETE route for one server. */
@@ -25,7 +25,7 @@ export function playerRoutes({ client, players }: WebContext): Router {
     router[method](
       path,
       route(async (req: Request, res: Response) => {
-        const access = await requireGuildAccess(req, client, "dj");
+        const access = await requireGuildAccess(req, { client, settings }, "dj");
         await action(access, req);
         res.json(players.getState(access.guild.id));
       }),
@@ -60,7 +60,10 @@ export function playerRoutes({ client, players }: WebContext): Router {
 
   djRoute("post", "/guilds/:id/player/skip", ({ guild }) => players.skip(guild.id));
   djRoute("post", "/guilds/:id/player/pause", ({ guild }) => players.pause(guild.id));
-  djRoute("post", "/guilds/:id/player/resume", ({ guild }) => players.resume(guild.id));
+  // After a restart, resuming joins the voice channel the user is in, like adding a song does.
+  djRoute("post", "/guilds/:id/player/resume", ({ guild, user }) =>
+    players.resume(guild.id, { voiceChannelId: guild.voiceStates.cache.get(user.id)?.channelId ?? null, textChannelId: null }),
+  );
   djRoute("post", "/guilds/:id/player/stop", ({ guild }) => players.stop(guild.id));
 
   djRoute("post", "/guilds/:id/player/seek", ({ guild }, req) => {

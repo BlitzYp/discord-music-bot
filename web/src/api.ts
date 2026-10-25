@@ -1,4 +1,14 @@
-import type { AudioFilter, GuildSummary, LoopMode, PlayerSnapshot, SessionUser } from "./shared";
+import type {
+  AdminStatus,
+  AudioFilter,
+  CurrentUser,
+  GlobalSettings,
+  GuildSettings,
+  GuildSettingsResponse,
+  GuildSummary,
+  LoopMode,
+  PlayerSnapshot,
+} from "./shared";
 
 /** An error answer from the bot's API, with its HTTP status (401 = not logged in). */
 export class ApiError extends Error {
@@ -29,9 +39,9 @@ async function request<T>(method: "GET" | "POST" | "PATCH" | "DELETE", path: str
 // ---- Login ----
 
 /** The logged-in user, or null if nobody is logged in. */
-export async function fetchMe(): Promise<SessionUser | null> {
+export async function fetchMe(): Promise<CurrentUser | null> {
   try {
-    return await request<SessionUser>("GET", "/me");
+    return await request<CurrentUser>("GET", "/me");
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) return null;
     throw error;
@@ -75,3 +85,20 @@ export const setLoopMode = (guildId: string, mode: LoopMode): State =>
   request("POST", `/guilds/${guildId}/player/loop`, { mode });
 export const setFilter = (guildId: string, filter: AudioFilter): State =>
   request("POST", `/guilds/${guildId}/player/filter`, { filter });
+
+// ---- A server's settings (server admins) ----
+
+export const fetchGuildSettings = (guildId: string): Promise<GuildSettingsResponse> =>
+  request("GET", `/guilds/${guildId}/settings`);
+/** Saves the given settings; the others stay as they are. */
+export const updateGuildSettings = (guildId: string, changes: Partial<GuildSettings>): Promise<GuildSettingsResponse> =>
+  request("PATCH", `/guilds/${guildId}/settings`, changes);
+
+// ---- The Admin page (bot owner) ----
+
+export const fetchGlobalSettings = (): Promise<GlobalSettings> => request("GET", "/admin/settings");
+export const updateGlobalSettings = (changes: Partial<GlobalSettings>): Promise<GlobalSettings> =>
+  request("PATCH", "/admin/settings", changes);
+export const fetchAdminStatus = (): Promise<AdminStatus> => request("GET", "/admin/status");
+/** Updates yt-dlp now. Answers with yt-dlp's last line of output, e.g. "yt-dlp is up to date (2026.10.01)". */
+export const updateYtDlpNow = (): Promise<{ message: string }> => request("POST", "/admin/ytdlp/update");

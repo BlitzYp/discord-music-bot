@@ -2,7 +2,7 @@
 
 A self-hosted Discord bot that plays music in voice channels. Audio is played by [Lavalink](https://lavalink.dev), a separate Java server that runs next to the bot on the same machine.
 
-**Status:** milestone 5 of 9 (see the milestones in [AGENTS.md](AGENTS.md)). Control playback with slash commands or on the website (log in with Discord).
+**Status:** milestone 6 of 9 (see the milestones in [AGENTS.md](AGENTS.md)). Control playback with slash commands or on the website (log in with Discord). Settings are on the website, and queues survive restarts.
 
 - [How it works](docs/how-it-works.md): a tour of the code, and how to add a command
 - [Design](docs/design.md): the full design and the decisions behind it
@@ -13,7 +13,7 @@ A self-hosted Discord bot that plays music in voice channels. Audio is played by
 | Command | What it does |
 |---|---|
 | `/play <link>` | Joins your voice channel and plays the link, or adds it to the queue if something is already playing |
-| `/pause` / `/resume` | Pauses or resumes the current track |
+| `/pause` / `/resume` | Pauses or resumes the current track. After a restart, `/resume` joins your voice channel and continues the song where it stopped. |
 | `/skip` | Skips to the next track |
 | `/stop` | Stops playback, clears the queue and leaves the voice channel |
 | `/seek <time>` | Jumps to a point in the current track, like `1:30` or `90` (seconds) |
@@ -22,12 +22,14 @@ A self-hosted Discord bot that plays music in voice channels. Audio is played by
 | `/move <from> <to>` | Moves a track to a different place in the queue (`to: 1` plays it next) |
 | `/shuffle` | Shuffles the queue; the current track keeps playing |
 | `/loop off\|track\|queue` | Repeats nothing, the current track, or the whole queue |
-| `/volume [percent]` | Shows or sets the volume, 0–150% (100 is normal). Resets to 100% when the bot leaves. |
+| `/volume [percent]` | Shows or sets the volume, 0–150% (100 is normal). Goes back to the server's starting volume when the bot leaves. |
 | `/filter <effect>` | Adds an audio effect: nightcore, vaporwave, bassboost, 8d, karaoke or soft (`off` removes it). One at a time; it stays on for the next songs until changed or the bot leaves. |
 
-The bot leaves the voice channel by itself, clearing the queue, after being alone in it for 60 seconds.
+The bot leaves the voice channel by itself, clearing the queue, after being alone in it for 60 seconds (changeable per server).
 
-**Who can use what:** `/queue` is for everyone; the other commands are for DJs. Until per-server settings arrive (milestone 6, where a server admin picks the DJ role), every member counts as a DJ. Server admins and the bot owner (`OWNER_ID`) can always do everything.
+**Who can use what:** `/queue` is for everyone; the other commands are for DJs. Server admins (Administrator or Manage Server) and the bot owner (`OWNER_ID`) can always do everything. **Until a server admin picks a DJ role on the website's Settings tab, nobody else is a DJ.** Pick `@everyone` there to let every member control playback.
+
+**After a restart** (including every save while `npm run dev` runs), the bot remembers each server's song, position, queue, loop mode, effect and recently played list. If people are still in its voice channel, it rejoins and carries on from where it stopped. Otherwise the song waits, paused, until someone uses `/resume` or `/play`.
 
 Supported links: YouTube, SoundCloud, Bandcamp, Twitch, Vimeo, direct audio file URLs, and most other sites [yt-dlp supports](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md). Searching by song name isn't supported yet.
 
@@ -100,6 +102,21 @@ While the bot runs, open **http://localhost:3000** (or whatever `WEB_PORT` is) a
 - **Everyone** sees the current song with its progress bar, the active effect, the queue, and the recently played songs.
 - **DJs** also get the controls: add a link, pause/resume, skip, stop, drag the progress bar to seek, volume, loop, effects, move ↑↓ or remove queued songs, shuffle, and "Play again" on recently played songs.
 - Adding a song from the website joins the voice channel you're in, like `/play`.
+- **Server admins** get a **Settings** tab for that server:
+
+  | Setting | What it does |
+  |---|---|
+  | DJ role | Who may control playback. No DJ role = only admins; `@everyone` = every member. |
+  | Only from the bot's voice channel | DJs must be in the bot's voice channel to control it (admins don't). Off by default. |
+  | Starting volume | The volume the bot joins at (default 100%). |
+  | Queue limit | The most songs that can wait in the queue (default: no limit). |
+  | Longest song | Longer songs can't be added; livestreams are always allowed (default: no limit). |
+  | Leave an empty channel after | How long the bot stays alone in voice before leaving (default 60 s; 0 = never). |
+  | Announce songs in | A text channel where the bot posts "Now playing …" for every new song (default: off). |
+
+- **You (the bot owner)** also get an **Admin** button at the top: how YouTube links are loaded (automatic, only Lavalink's plugin, or only yt-dlp), whether yt-dlp updates on every start, an "Update now" button for yt-dlp, and the status of the bot, Lavalink and yt-dlp.
+
+Settings apply right away; there's nothing to restart.
 
 For now the website is only reachable from your own computer; making it public is milestone 9. With `npm run dev`, edits to `web/` show up in the browser immediately.
 
@@ -125,20 +142,30 @@ Other scripts:
 - **"The website hasn't been built yet"** with `npm start`: run `npm run build` first.
 - **Discord says "Invalid OAuth2 redirect_uri"** when logging in: add `http://localhost:3000/api/auth/callback` (exactly, matching `OAUTH_REDIRECT_URI`) under OAuth2 → Redirects in the Developer Portal.
 - **"Discord didn't accept the login"**: `DISCORD_CLIENT_SECRET` is wrong or was reset; copy the current one from the Developer Portal.
-- **A role change doesn't apply on the website right away**: the website rechecks your roles at most every 30 seconds.
+- **A role change doesn't apply on the website right away**: the website rechecks your roles at most every 30 seconds. (Changing which role is the DJ role applies at once.)
+- **Friends get "You need to be a DJ"**: the server has no DJ role yet, so only admins can control playback. A server admin opens the website → the server → **Settings** → DJ role, and picks a role (or `@everyone`).
+- **"Join the bot's voice channel (…) to control playback"**: the server's "Only from the bot's voice channel" setting is on. Join that channel, or ask an admin to turn the setting off.
+- **"Playback stopped when the bot restarted"**: the bot restarted while nobody was in its voice channel (or the song was paused). Use `/resume` (or Resume on the website) from a voice channel to carry on.
+- **Start completely fresh** (forget all settings, queues and history): stop the bot and delete `data/bot.db` (and `bot.db-wal` / `bot.db-shm` next to it, if present). It's recreated on the next start.
 - Lavalink's own logs are in `lavalink/logs/`. Downloaded songs are kept in `data/ytdlp-cache/` (the 20 most recent) and deleted when the bot starts.
 
 ## Project layout
 
 ```
 src/
-  index.ts              Starts everything: config → Lavalink → Discord bot → website
+  index.ts              Starts everything: config → database → Lavalink → Discord bot → website
   config.ts             Reads and checks .env
   permissions.ts        Who may do what (owner, admin, DJ, member), for commands and the website
+  db/
+    database.ts         Opens data/bot.db (SQLite)
+    migrations.ts       Creates and updates the tables
+    settingsStore.ts    Global and per-server settings
+    playerStateStore.ts Each server's saved song, position, queue and history
   bot/
     client.ts           The discord.js client
     commands/           One file per slash command
-    events/             Discord event handlers (ready, slash commands, playback errors)
+    events/             Discord event handlers (ready + rejoining after a restart, slash commands, playback messages)
+    voice.ts            Counts the people in a voice channel
     format.ts           Formatting helpers for Discord messages
   player/
     PlayerManager.ts    The one entry point for playback; commands call this
@@ -149,7 +176,8 @@ src/
     errors.ts           UserError: errors whose message is shown to users
   web/
     server.ts           Starts the website: REST API, Socket.IO and the React app on one port
-    routes/             REST API routes (under /api): auth.ts (login), guilds.ts (read), player.ts (controls)
+    routes/             REST API routes (under /api): auth.ts (login), guilds.ts (read), player.ts (controls),
+                        settings.ts (a server's settings), admin.ts (the owner's Admin page)
     session.ts          The signed login cookie
     access.ts           requireGuildAccess(): the permission check every server route starts with
     http.ts             route(): turns errors into HTTP answers
@@ -157,14 +185,16 @@ src/
     frontend.ts         Serves the React app (Vite in development, web/dist in production)
   shared/               Types and helpers used by both the bot and the website
 web/                    The React website (Vite)
-  src/App.tsx           The page: login, server picker, and the server's dashboard
-  src/components/       AddSong, NowPlaying (+ SeekBar, PlayerControls), EffectPicker, QueueList, HistoryList
+  src/App.tsx           The page: login, server picker, the server's player and Settings tab, the Admin page
+  src/components/       AddSong, NowPlaying (+ SeekBar, PlayerControls), EffectPicker, QueueList, HistoryList,
+                        GuildSettingsForm, AdminPanel
   src/api.ts            One function per REST call
   src/useGuildState.ts  Live state from the bot over Socket.IO
 lavalink/
   application.yml       Lavalink settings (sources, YouTube plugin)
 scripts/                Helpers for downloading Lavalink and yt-dlp, and starting Lavalink
 bin/                    yt-dlp (downloaded, not in git)
+data/bot.db             Settings, queues and history (SQLite, not in git)
 data/ytdlp-cache/       Songs downloaded by yt-dlp (not in git)
 docs/                   Longer explanations
 ```

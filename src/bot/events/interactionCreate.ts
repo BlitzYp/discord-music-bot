@@ -1,5 +1,5 @@
 import { type Client, Events, MessageFlags } from "discord.js";
-import { hasLevel, LEVEL_NAMES, levelOf } from "../../permissions.js";
+import { hasLevel, LEVEL_NAMES, levelOf, voiceChannelProblem } from "../../permissions.js";
 import { UserError } from "../../player/errors.js";
 import { commandsByName } from "../commands/index.js";
 import type { CommandContext } from "../commands/types.js";
@@ -14,10 +14,22 @@ export function registerInteractionCreate(client: Client, ctx: CommandContext): 
       return;
     }
     // Discord sends the member (with roles and permissions) along with the command, so this is always current.
-    if (!hasLevel(levelOf(interaction.member), command.permission)) {
-      const content = `You need to be ${LEVEL_NAMES[command.permission]} to use /${command.data.name}.`;
+    const level = levelOf(interaction.member, ctx.settings);
+    if (!hasLevel(level, command.permission)) {
+      let content = `You need to be ${LEVEL_NAMES[command.permission]} to use /${command.data.name}.`;
+      const noDjRole = ctx.settings.guild(interaction.guildId).djRoleId === null;
+      if (command.permission === "dj" && noDjRole) {
+        content += " This server has no DJ role yet: a server admin can pick one on the bot's website, under Settings.";
+      }
       await interaction.reply({ content, flags: MessageFlags.Ephemeral });
       return;
+    }
+    if (command.permission === "dj") {
+      const problem = voiceChannelProblem(interaction.guild, interaction.user.id, level, ctx.settings);
+      if (problem) {
+        await interaction.reply({ content: problem, flags: MessageFlags.Ephemeral });
+        return;
+      }
     }
 
     try {

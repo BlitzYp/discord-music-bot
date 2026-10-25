@@ -4,8 +4,9 @@ A self-hosted Discord bot that plays audio in voice channels, controlled by slas
 
 **Status:** see the markers in the milestone list. "working" = the owner confirmed it in Discord or the browser; "written" = built and tested by an agent, not yet by the owner. Things to know:
 - YouTube playback needs the unreleased plugin build pinned in `lavalink/application.yml` (its comments explain why).
-- Until milestone 6 there's no way to set a DJ role, so every server member counts as a DJ (`isDj()` in `src/permissions.ts`).
-- Extras the owner asked for along the way: `/filter` effects (working, also on the website), seeking (`/seek` and the website's progress bar), and a "Recently played" list (in memory until milestone 6).
+- With no DJ role picked, only admins control playback; a server admin picks one (or @everyone) on the website's Settings tab.
+- `npm run dev` restarts on every save in `src/`. Since milestone 6 the queue survives that (the bot rejoins and continues), but warn the owner before editing `src/` while they're listening.
+- Extras the owner asked for along the way: `/filter` effects (working, also on the website), seeking (`/seek` and the website's progress bar), and a "Recently played" list.
 
 ## Where to look
 
@@ -22,7 +23,7 @@ Build them in order. Each milestone works end to end in Discord before the next 
 3. **YouTube resolver modes:** yt-dlp resolver and `auto` fallback (mode hardcoded for now). *(written)*
 4. **Read-only web view:** Express + Socket.IO + React page showing the current track and the queue live (localhost, no auth yet). *(working)*
 5. **Auth + web controls:** Discord OAuth, server list, permission checks, and the website's controls: adding links, pause/resume, skip, stop, seek, volume, loop, effects, reorder and remove; plus song history. *(working)*
-6. **Settings + persistence:** SQLite, per-server settings page (DJ role!), owner admin panel (YouTube mode, limits, status), queues and history restored after restart.
+6. **Settings + persistence:** SQLite, per-server settings page (DJ role!), owner admin panel (YouTube mode, limits, status), queues and history restored after restart. *(written)*
 7. **Playlists:** per-server saved playlists that members add to and DJs play (replacing the queue), importing YouTube playlists, saving the queue as a playlist. See "Playlists" in docs/design.md.
 8. **Library:** `/play file:`, website uploads, ffprobe/ffmpeg pipeline, library browser.
 9. **Polish:** text search, Cloudflare Tunnel (public URL), run as a background service (pm2 or NSSM).
@@ -34,7 +35,8 @@ Build them in order. Each milestone works end to end in Discord before the next 
 - **Lavalink is the only voice path.** Every source ends up as something Lavalink loads: a link, a direct HTTP URL or a local file path. `@discordjs/voice` stays out of the project.
 - **Server-side permissions:** every change is permission-checked on the server, on both paths: slash commands declare a `permission` level, and every guild web route starts with `requireGuildAccess()`. Hiding buttons on the website is only for convenience.
 - **Secrets live in `.env` only**, validated in `src/config.ts`; new variables also go into `.env.example`.
-- Types shared by the backend and the future frontend go in `src/shared/`.
+- Types shared by the backend and the frontend go in `src/shared/`.
+- **Schema changes are new migrations:** append to `MIGRATIONS` in `src/db/migrations.ts`; never edit one that already ran.
 
 ## Working style
 

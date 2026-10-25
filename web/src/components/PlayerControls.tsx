@@ -12,6 +12,8 @@ interface Props {
 export function PlayerControls({ guildId, snapshot }: Props) {
   const { run, pending, error } = useAction();
   const playing = snapshot.current !== null;
+  // After a restart the bot isn't in voice yet, but the interrupted song can still be stopped or looped.
+  const active = snapshot.voiceChannelId !== null || snapshot.interrupted;
 
   function stop() {
     // Stopping clears the whole queue, so ask first.
@@ -33,7 +35,7 @@ export function PlayerControls({ guildId, snapshot }: Props) {
         <button type="button" disabled={!playing || pending} onClick={() => run(() => api.skip(guildId))}>
           ⏭ Skip
         </button>
-        <button type="button" disabled={!snapshot.voiceChannelId || pending} onClick={stop}>
+        <button type="button" disabled={!active || pending} onClick={stop}>
           ⏹ Stop
         </button>
 
@@ -41,7 +43,7 @@ export function PlayerControls({ guildId, snapshot }: Props) {
           Loop
           <select
             value={snapshot.loopMode}
-            disabled={!snapshot.voiceChannelId || pending}
+            disabled={!active || pending}
             onChange={(event) => run(() => api.setLoopMode(guildId, event.target.value as LoopMode))}
           >
             <option value="off">off</option>

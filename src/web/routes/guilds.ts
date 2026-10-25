@@ -6,7 +6,7 @@ import { route } from "../http.js";
 import type { WebContext } from "../server.js";
 
 /** Read-only routes: the servers the user can see, and their playback state. */
-export function guildRoutes({ client, players }: WebContext): Router {
+export function guildRoutes({ client, players, settings }: WebContext): Router {
   const router = Router();
 
   /** Servers that both the logged-in user and the bot are in, with what the user may do in each. */
@@ -15,7 +15,7 @@ export function guildRoutes({ client, players }: WebContext): Router {
     route(async (req, res) => {
       const user = requireUser(req);
       const guilds = [...client.guilds.cache.values()];
-      const levels = await Promise.all(guilds.map((guild) => getPermissionLevel(guild, user.id)));
+      const levels = await Promise.all(guilds.map((guild) => getPermissionLevel(guild, user.id, settings)));
 
       const visible: GuildSummary[] = [];
       guilds.forEach((guild, index) => {
@@ -30,7 +30,7 @@ export function guildRoutes({ client, players }: WebContext): Router {
   router.get(
     "/guilds/:id/state",
     route(async (req, res) => {
-      const { guild } = await requireGuildAccess(req, client, "member");
+      const { guild } = await requireGuildAccess(req, { client, settings }, "member");
       res.json(players.getState(guild.id));
     }),
   );

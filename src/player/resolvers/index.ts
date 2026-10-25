@@ -1,20 +1,11 @@
 import type { LavalinkManager, Track } from "lavalink-client";
+import type { YoutubeMode } from "../../shared/settings.js";
 import type { QueueItem, Requester, TrackSource } from "../../shared/types.js";
 import { UserError } from "../errors.js";
 import { loadFileWithLavalink, loadUrlWithLavalink } from "./lavalink.js";
 import { downloadAudio, fetchInfo } from "./ytdlp.js";
 
 const YOUTUBE_HOSTS = new Set(["youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be"]);
-
-/**
- * How YouTube links are loaded:
- * - "lavalink": only through Lavalink's YouTube plugin.
- * - "ytdlp": only through yt-dlp (slower: each song is downloaded first, which takes about 10 seconds).
- * - "auto": the plugin first, yt-dlp if the plugin fails.
- * Hardcoded for now; becomes the owner's setting in the admin panel in milestone 6.
- */
-export type YoutubeMode = "lavalink" | "ytdlp" | "auto";
-export const YOUTUBE_MODE: YoutubeMode = "auto";
 
 /** The two ways of turning a link into something Lavalink can play. */
 export type ResolveMethod = "lavalink" | "ytdlp";
@@ -40,10 +31,10 @@ export function parseInput(input: string): TrackSource {
   return YOUTUBE_HOSTS.has(url.hostname) ? { kind: "youtube", url: url.href } : { kind: "url", url: url.href };
 }
 
-/** The methods to try for a link, in order. */
-function methodsFor(source: TrackSource): ResolveMethod[] {
+/** The methods to try for a link, in order. `youtubeMode` is the owner's setting (see src/shared/settings.ts). */
+function methodsFor(source: TrackSource, youtubeMode: YoutubeMode): ResolveMethod[] {
   if (source.kind === "youtube") {
-    switch (YOUTUBE_MODE) {
+    switch (youtubeMode) {
       case "lavalink":
         return ["lavalink"];
       case "ytdlp":
@@ -57,8 +48,8 @@ function methodsFor(source: TrackSource): ResolveMethod[] {
 }
 
 /** The method to fall back to after `failed` didn't work for this source, if there is one. */
-export function fallbackMethod(source: TrackSource, failed: ResolveMethod): ResolveMethod | undefined {
-  const methods = methodsFor(source);
+export function fallbackMethod(source: TrackSource, failed: ResolveMethod, youtubeMode: YoutubeMode): ResolveMethod | undefined {
+  const methods = methodsFor(source, youtubeMode);
   return methods[methods.indexOf(failed) + 1];
 }
 
@@ -71,11 +62,11 @@ export async function resolvePlayable(
   lavalink: LavalinkManager,
   source: TrackSource,
   requester: Requester,
-  options: { only?: ResolveMethod } = {},
+  options: { youtubeMode: YoutubeMode; only?: ResolveMethod },
 ): Promise<ResolvedTrack> {
   if (source.kind === "file") throw new UserError("Library files aren't supported yet.");
 
-  const methods = options.only ? [options.only] : methodsFor(source);
+  const methods = options.only ? [options.only] : methodsFor(source, options.youtubeMode);
   let lastError: unknown;
   for (const method of methods) {
     try {
@@ -101,10 +92,11 @@ export async function fetchMetadata(
   lavalink: LavalinkManager,
   source: TrackSource,
   requester: Requester,
+  youtubeMode: YoutubeMode,
 ): Promise<{ meta: TrackMetadata; track?: Track }> {
   if (source.kind === "file") throw new UserError("Library files aren't supported yet.");
 
-  const methods = methodsFor(source);
+  const methods = methodsFor(source, youtubeMode);
   let lastError: unknown;
   for (const method of methods) {
     try {

@@ -6,7 +6,12 @@ export const resume: Command = {
   data: new SlashCommandBuilder().setName("resume").setDescription("Resume the paused track"),
 
   async execute(interaction, { players }) {
-    await players.resume(interaction.guildId);
-    await interaction.reply("Resumed.");
+    // After a restart this joins the requester's voice channel and reloads the song, which can take a while.
+    await interaction.deferReply();
+    await players.resume(interaction.guildId, {
+      voiceChannelId: interaction.guild.voiceStates.cache.get(interaction.user.id)?.channelId ?? null,
+      textChannelId: interaction.channelId,
+    });
+    await interaction.editReply("Resumed.");
   },
 };

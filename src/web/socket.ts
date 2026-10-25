@@ -15,7 +15,7 @@ const roomFor = (guildId: string) => `guild:${guildId}`;
  * that the logged-in user is a member there, every PlayerManager event for that server is pushed to it.
  * Sockets only push updates: changes go through the REST API, so permissions are checked in one place.
  */
-export function attachSocket(httpServer: HttpServer, { client, players }: WebContext, session: RequestHandler): void {
+export function attachSocket(httpServer: HttpServer, { client, players, settings }: WebContext, session: RequestHandler): void {
   const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer);
   // Runs the session middleware on the socket's opening request, so we know who is connected.
   io.engine.use(session);
@@ -25,7 +25,7 @@ export function attachSocket(httpServer: HttpServer, { client, players }: WebCon
       const user = sessionUserOf(socket.request);
       const guild = typeof guildId === "string" ? client.guilds.cache.get(guildId) : undefined;
       if (!user || !guild) return;
-      const level = await getPermissionLevel(guild, user.id);
+      const level = await getPermissionLevel(guild, user.id, settings);
       if (!level) return; // not a member of that server
 
       for (const room of socket.rooms) {

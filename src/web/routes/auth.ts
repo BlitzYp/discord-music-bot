@@ -1,7 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { Router } from "express";
 import type { Config } from "../../config.js";
-import type { SessionUser } from "../../shared/types.js";
+import type { CurrentUser, SessionUser } from "../../shared/types.js";
+import { isOwner } from "../access.js";
 import { HttpError, route } from "../http.js";
 import { sessionUserOf } from "../session.js";
 
@@ -63,7 +64,8 @@ export function authRoutes(config: Config): Router {
       res.status(401).json({ error: "Not logged in." });
       return;
     }
-    res.json(user);
+    const me: CurrentUser = { ...user, isOwner: isOwner(user.id) };
+    res.json(me);
   });
 
   return router;

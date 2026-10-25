@@ -511,6 +511,127 @@ input[type="url"] {
   padding: 2px 8px;
 }
 
+/* ---- Navigation ---- */
+
+/* A button that looks like plain text, e.g. the title that leads back to the player. */
+button.link {
+  padding: 0;
+  border: none;
+  background: none;
+  font-weight: inherit;
+}
+
+button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.member-hint {
+  margin: 0;
+}
+
+/* ---- Settings pages ---- */
+
+.settings {
+  display: grid;
+  gap: 16px;
+}
+
+.settings h3 {
+  margin: 0;
+}
+
+.top-hint {
+  margin: -8px 0 0;
+}
+
+.field {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 4px 16px;
+  align-items: center;
+}
+
+.field-label {
+  font-weight: 600;
+}
+
+.field-hint {
+  grid-column: 2;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.field select {
+  max-width: 100%;
+}
+
+.checkbox,
+.number-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+input[type="number"] {
+  font: inherit;
+  width: 7em;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.save-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* ---- Admin status ---- */
+
+.status {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 16px;
+  margin: 0;
+}
+
+.status dt {
+  font-weight: 600;
+}
+
+.status dd {
+  margin: 0;
+}
+
+.ok {
+  color: #30a46c;
+  font-weight: 600;
+}
+
+code {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.9em;
+}
+
 /* Phones: stack the artwork above the details. */
 @media (max-width: 520px) {
   .now-playing .track {
@@ -523,5 +644,13 @@ input[type="url"] {
 
   .queue .row-actions {
     flex-direction: column;
+  }
+
+  .field {
+    grid-template-columns: 1fr;
+  }
+
+  .field-hint {
+    grid-column: 1;
   }
 }

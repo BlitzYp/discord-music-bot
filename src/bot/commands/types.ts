@@ -1,9 +1,11 @@
 import type { ChatInputCommandInteraction, SharedSlashCommand } from "discord.js";
+import type { SettingsStore } from "../../db/settingsStore.js";
 import type { PermissionLevel } from "../../permissions.js";
 import type { PlayerManager } from "../../player/PlayerManager.js";
 
 export interface CommandContext {
   players: PlayerManager;
+  settings: SettingsStore;
 }
 
 /** Runs only in servers: `interaction.guildId` is always set. */

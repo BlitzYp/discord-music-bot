@@ -1,12 +1,18 @@
+import { setTimeout as sleep } from "node:timers/promises";
 import { type Client, Events, InteractionContextType } from "discord.js";
 import type { LavalinkManager } from "lavalink-client";
 import type { Config } from "../../config.js";
+import type { PlayerManager } from "../../player/PlayerManager.js";
 import { commands } from "../commands/index.js";
+import { countListeners } from "../voice.js";
 
-export function registerReady(client: Client, lavalink: LavalinkManager, config: Config): void {
+export function registerReady(client: Client, lavalink: LavalinkManager, players: PlayerManager, config: Config): void {
   client.once(Events.ClientReady, async (ready) => {
     console.log(`[bot] logged in as ${ready.user.tag} (${ready.guilds.cache.size} servers)`);
     await lavalink.init({ id: ready.user.id, username: ready.user.username });
+
+    // Runs alongside the command registration below; it waits for Lavalink, which may not be running yet.
+    void continuePlaybackAfterRestart(ready, lavalink, players);
 
     try {
       await registerSlashCommands(ready, config);
@@ -14,6 +20,27 @@ export function registerReady(client: Client, lavalink: LavalinkManager, config:
       console.error("[bot] failed to register slash commands:", error);
     }
   });
+}
+
+/**
+ * Rejoins the voice channels where songs were playing when the bot stopped, if people are still in them.
+ * Discord's voice states are already known here (the "ready" event comes after Discord sent every server).
+ */
+async function continuePlaybackAfterRestart(client: Client<true>, lavalink: LavalinkManager, players: PlayerManager): Promise<void> {
+  await waitForLavalinkSession(lavalink);
+  await players.rejoinAfterRestart((guildId, voiceChannelId) => {
+    const guild = client.guilds.cache.get(guildId);
+    return guild !== undefined && countListeners(guild, voiceChannelId) > 0;
+  });
+}
+
+/**
+ * Waits until a Lavalink node is connected and has a session id; players can't be created before that.
+ * lavalink-client's "connect" event can fire just before the session id arrives, so this checks every second.
+ */
+async function waitForLavalinkSession(lavalink: LavalinkManager): Promise<void> {
+  const hasSession = () => [...lavalink.nodeManager.nodes.values()].some((node) => node.connected && node.sessionId);
+  while (!hasSession()) await sleep(1000);
 }
 
 /**

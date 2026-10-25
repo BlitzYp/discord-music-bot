@@ -74,6 +74,11 @@ export async function updateYtDlp(): Promise<string> {
   return output.trim().split("\n").at(-1) ?? "";
 }
 
+/** yt-dlp's version (a date like "2026.10.01"), for the owner's Admin page. */
+export async function ytDlpVersion(): Promise<string> {
+  return (await runYtDlp(["--version"], 15_000)).trim();
+}
+
 async function startDownload(url: string): Promise<string> {
   await fetchInfo(url); // fails fast on livestreams, and its result makes the download quicker
   await mkdir(DOWNLOAD_DIR, { recursive: true });

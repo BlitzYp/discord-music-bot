@@ -23,6 +23,7 @@ The bot talks to Lavalink through the [`lavalink-client`](https://github.com/Tom
 | PlayerManager | `src/player/PlayerManager.ts` | The single entry point for playback. Finds the right server's `GuildPlayer` and runs the action. |
 | GuildPlayer | `src/player/GuildPlayer.ts` | One server's state: `current` (playing now) and `queue` (up next). |
 | Resolvers | `src/player/resolvers/` | Turn a link into a track Lavalink can play. |
+| Database | `src/db/` | Settings, and each server's saved playback (SQLite). See [Settings and the database](#settings-and-the-database). |
 
 The rule that holds it together: **commands (and later the website) only call `PlayerManager` methods.** If Discord and the website both go through the same methods, they can never show different queues.
 
@@ -32,9 +33,9 @@ The rule that holds it together: **commands (and later the website) only call `P
 2. **`commands/play.ts`** calls `deferReply()` first, because Discord wants a response within 3 seconds and loading a link can take longer. Then it calls `players.play(guildId, { input, requestedBy, voiceChannelId, textChannelId })`.
 3. **`PlayerManager.play()`**:
    1. `parseInput()` checks that the input is a link and labels it `youtube` or `url`.
-   2. `GuildPlayer.ensureConnected()` joins the requester's voice channel, unless the bot is already in one.
-   3. `fetchMetadata()` loads the link through Lavalink to get the title, duration and thumbnail.
-   4. `GuildPlayer.enqueue()` either plays it right away (if nothing was playing) or adds it to the end of the queue.
+   2. `GuildPlayer.ensureConnected()` joins the requester's voice channel, unless the bot is already in one. (After a restart it also continues the interrupted song; see [Surviving a restart](#surviving-a-restart).)
+   3. `fetchMetadata()` loads the link through Lavalink to get the title, duration and thumbnail. `checkDurationLimit()` refuses songs longer than the server's limit.
+   4. `GuildPlayer.enqueue()` either plays it right away (if nothing was playing) or adds it to the end of the queue, unless the queue is at the server's limit.
 4. Back in `play.ts`, the reply says "Now playing ..." or "Queued at #3 ...".
 
 ## What happens when a track ends
@@ -52,7 +53,7 @@ Lavalink tells the bot when a track ends, and why. `PlayerManager.listenToLavali
 
 `/skip` drops the current item, or, in `queue` loop mode, moves it to the end of the queue. Every new track starts unpaused, because Lavalink would otherwise stay paused across a skip.
 
-Tracks that played to the end or were skipped go into `GuildPlayer.history` (newest first, the last 20; a track on repeat is listed once). Tracks that failed don't. The website shows it as "Recently played". It survives `/stop`, but not a bot restart until milestone 6 saves it.
+Tracks that played to the end or were skipped go into `GuildPlayer.history` (newest first, the last 20; a track on repeat is listed once). Tracks that failed don't. The website shows it as "Recently played". It survives `/stop`, and it's saved with the queue, so it survives restarts too.
 
 ## Lavalink first, yt-dlp as the backup
 
@@ -61,7 +62,7 @@ There are two ways to turn a link into something Lavalink can play (`src/player/
 - **`lavalink`**: Lavalink loads the link itself (`resolvers/lavalink.ts`). Fast, and the normal path.
 - **`ytdlp`**: yt-dlp downloads the audio into `data/ytdlp-cache/`, and Lavalink plays the file from disk (`resolvers/ytdlp.ts`). Slower (about 10 seconds per song), but yt-dlp keeps up with YouTube's changes faster than Lavalink's plugin, and it supports SoundCloud, which Lavalink 4.2.2 can't play.
 
-`methodsFor(source)` in `resolvers/index.ts` decides which methods to try, in order. For YouTube that depends on `YOUTUBE_MODE` (`auto` = Lavalink then yt-dlp); every other site gets Lavalink then yt-dlp. `resolvePlayable()` tries them until one works.
+`methodsFor(source, youtubeMode)` in `resolvers/index.ts` decides which methods to try, in order. For YouTube that depends on the owner's `youtubeMode` setting on the Admin page (`auto` = Lavalink then yt-dlp); every other site gets Lavalink then yt-dlp. `resolvePlayable()` tries them until one works. The setting is read for every song, so changing it applies from the next one.
 
 Why download instead of handing Lavalink yt-dlp's audio URL (`yt-dlp -g`)? Tested 2026-10-25: YouTube answers those URLs with 403 Forbidden unless the request comes from yt-dlp itself.
 
@@ -87,7 +88,7 @@ Users see queue positions: the numbers in `/queue`, where 1 is the next track. `
 
 ### Leaving an empty channel
 
-`bot/events/voiceStateUpdate.ts` watches people joining and leaving voice channels. Whenever the bot's channel changes, it counts the people in it (bots don't count) and calls `players.updateListenerCount()`. When the count hits 0, `PlayerManager` starts a 60-second timer (`LEAVE_WHEN_EMPTY_AFTER_MS`). If someone joins in time, the timer is cancelled; otherwise the bot does a normal `/stop`. In milestone 6 the delay becomes the per-server `leaveWhenEmptyAfterSec` setting.
+`bot/events/voiceStateUpdate.ts` watches people joining and leaving voice channels. Whenever the bot's channel changes, it counts the people in it (`countListeners()` in `bot/voice.ts`; bots don't count) and calls `players.updateListenerCount()`. When the count hits 0, `PlayerManager` starts a timer for the server's `leaveWhenEmptyAfterSec` setting (60 seconds by default; 0 means never leave). If someone joins in time, the timer is cancelled; otherwise the bot does a normal `/stop`.
 
 ### Audio filters
 
@@ -109,7 +110,7 @@ The website runs inside the bot's own process (`src/web/`), so it reads the same
 
 | Part | File | Job |
 |---|---|---|
-| REST API | `src/web/routes/` | `auth.ts` (login), `guilds.ts` (your servers, a server's state), `player.ts` (the controls) |
+| REST API | `src/web/routes/` | `auth.ts` (login), `guilds.ts` (your servers, a server's state), `player.ts` (the controls), `settings.ts` (a server's settings), `admin.ts` (the owner's Admin page) |
 | Socket.IO | `src/web/socket.ts` | Pushes every change to the browsers watching that server |
 | The React app | `src/web/frontend.ts` | Serves `web/`: through Vite when running from source (`npm run dev`, instant reloads), or the built `web/dist/` with `npm start` |
 
@@ -143,17 +144,73 @@ The server still listens on `127.0.0.1` only. Making it public is milestone 9; l
 | Level | Who | May |
 |---|---|---|
 | owner | `OWNER_ID` | everything, in every server |
-| admin | Administrator or Manage Server | settings (milestone 6) and all controls |
-| dj | the DJ role (milestone 6); **for now every member** | control playback |
+| admin | Administrator or Manage Server | the server's Settings tab, and all controls |
+| dj | the server's DJ role (picked on the Settings tab). No role picked = nobody; @everyone = every member | control playback |
 | member | anyone in the server | look |
 
 - **Slash commands** declare a `permission` (`src/bot/commands/*.ts`), checked in `bot/events/interactionCreate.ts` using the member Discord sends with the command.
 - **Web routes** start with `requireGuildAccess(req, client, level)` (`src/web/access.ts`). It answers 401 if nobody is logged in, 404 if the user (or the bot) isn't in that server, and 403 if their level is too low. It looks the member up through Discord's API (no privileged intent needed), cached for 30 seconds, so a role change takes up to 30 s to apply on the website.
+- **Same voice channel:** with the server's `requireSameVoiceChannel` setting on, `voiceChannelProblem()` (`src/permissions.ts`) refuses DJ actions from a DJ who isn't in the bot's voice channel. Both paths check it right after the level: `interactionCreate.ts` for commands with `permission: "dj"`, and `requireGuildAccess()` for `"dj"` routes. Admins are exempt.
+- **The owner's Admin page:** every `/api/admin/...` route starts with `requireOwner(req)`, and `GET /api/me` tells the website whether to show the Admin button (`isOwner`).
 - **The socket** only lets a browser watch a server whose member is logged in.
 - **The website** shows controls only to DJs (`hasLevel(guild.level, "dj")`), but that's just convenience: every change is checked again on the server.
 - Changes must be JSON (`requireJsonForChanges`), and the cookie is `sameSite=lax`. Together these stop another website from making changes through your logged-in browser.
 
 **To show something new on the page:** if the information is already in `PlayerSnapshot`, just use it in a component in `web/src/components/`. If not, add it to `PlayerSnapshot` in `src/shared/types.ts`, fill it in `GuildPlayer.snapshot()` (and `PlayerManager.getState()` for servers with no player yet), and the compiler will point at anything else that needs updating.
+
+## Settings and the database
+
+Everything the bot remembers lives in one SQLite file, `data/bot.db` (`src/db/database.ts`). `better-sqlite3` is synchronous: a query finishes before the next line runs, so there are no `await`s and no races, and the queries are tiny enough not to hold anything up.
+
+| File | Job |
+|---|---|
+| `db/migrations.ts` | Creates and updates the tables. Each entry in `MIGRATIONS` runs once; SQLite's `user_version` remembers how many ran. **Change a table by adding an entry**, never by editing one that already ran (existing databases won't run it again). |
+| `db/settingsStore.ts` | `SettingsStore`: the owner's global settings (`global()`) and each server's (`guild(id)`), with `updateGlobal()` / `updateGuild()` that save only the given keys. A server without a row gets the defaults. |
+| `db/playerStateStore.ts` | `PlayerStateStore`: each server's current track, position, queue and history (see the next section). |
+| `shared/settings.ts` | The settings' types, defaults and allowed ranges, shared with the website. |
+
+Settings are read from the database every time they're needed, not cached, so a change on the website applies to the very next command (and a new DJ role applies at once, even though Discord roles are cached for 30 s). Who reads what:
+
+- `src/permissions.ts`: `djRoleId`, `requireSameVoiceChannel`
+- `GuildPlayer`: `defaultVolume` (when joining voice), `maxQueueLength`, `youtubeMode`
+- `PlayerManager`: `maxTrackDurationSec`, `leaveWhenEmptyAfterSec`
+- `bot/events/playerEvents.ts`: `announceChannelId`
+- `src/index.ts`: `ytdlpAutoUpdate` (at startup)
+
+The website edits them through `routes/settings.ts` (server admins) and `routes/admin.ts` (the owner). Each route checks the body with a zod schema (`parseBody()` in `src/web/http.ts`), so a bad value is answered with a 400 that names the setting, and also checks that a role or channel id belongs to that server.
+
+### How to add a setting
+
+Example: a per-server `maxSongsPerUser`.
+
+1. **Type and default:** add it to `GuildSettings`, `DEFAULT_GUILD_SETTINGS` and, for a number, `SETTING_LIMITS` in `src/shared/settings.ts`.
+2. **Column:** add a migration to `MIGRATIONS` in `src/db/migrations.ts`, e.g. `ALTER TABLE guild_settings ADD COLUMN max_songs_per_user INTEGER;`.
+3. **Store:** read and write the column in `SettingsStore.guild()` and `updateGuild()` (`src/db/settingsStore.ts`).
+4. **Validation:** add it to `guildSettingsChanges` in `src/web/routes/settings.ts`.
+5. **Page:** add a `<Field>` to `web/src/components/GuildSettingsForm.tsx`.
+6. **Use it** where the rule applies, through `settings.guild(guildId).maxSongsPerUser` (in `PlayerManager` or `GuildPlayer` for playback rules).
+
+A global setting works the same way with `GlobalSettings`, `globalSettingsChanges` in `routes/admin.ts` and `AdminPanel.tsx`, but needs no migration: `global_settings` stores one row per key.
+
+## Surviving a restart
+
+`npm run dev` restarts the bot on every save, and the PC may reboot, so each server's playback is saved as it changes and picked up again on start.
+
+**Saving.** `GuildPlayer.emitQueueUpdate()` (the track or the queue changed) calls `PlayerManager.saveState()`, which rewrites that server's saved state in one transaction. `emitPlayerUpdate()` (pause, volume, loop, effect, seek, and Lavalink's position update about once a second) calls `saveStatus()`, which only updates the `player_state` row. So a crash loses about a second of position, and a killed process needs no clean-up step.
+
+On Ctrl+C, `shutdown()` in `src/index.ts` calls `players.stopSaving()` *before* leaving voice. Leaving voice resets each `GuildPlayer`, which would otherwise save every server as "nothing playing".
+
+**Loading.** `PlayerManager`'s constructor loads every saved server straight away (`GuildPlayer.restore()`), so a command that arrives early continues the saved queue instead of starting a new one. A track that was playing becomes **interrupted**: `GuildPlayer.interrupted` holds where it had got to, the volume and the voice channel, `current` is the track, but the bot isn't in voice. The snapshot shows it paused with `interrupted: true`, and the website labels it "Stopped by a restart".
+
+**Continuing.** `GuildPlayer.ensureConnected()` continues an interrupted track as soon as the bot is in voice again (`continueInterrupted()`: play it from the saved position; if it can't be loaded any more, move on to the next one). Three things call it:
+
+1. **The bot by itself:** once Discord is ready and Lavalink has a session (`continuePlaybackAfterRestart()` in `bot/events/ready.ts`), `players.rejoinAfterRestart()` rejoins the saved voice channel, but only if people are still in it and the track wasn't paused.
+2. **`/resume`** (or the website's Resume button), in the requester's voice channel.
+3. **`/play`**, which continues the interrupted track and then queues the new one.
+
+While interrupted, `/skip` moves to the next song without playing it (it waits to be continued from its start), `/stop` clears everything, and controls that need the voice connection (pause, seek, volume, effects) answer "Playback stopped when the bot restarted. Use /resume to continue."
+
+Saved items are links, loaded again when they play like any queued item, so links that expired during the downtime don't matter.
 
 ## Errors
 
@@ -218,3 +275,4 @@ Things to keep in mind:
 
 - **`.env`**: secrets and connection settings. Read and checked in `src/config.ts`; add new variables to the zod schema there and to `.env.example`.
 - **`lavalink/application.yml`**: which sources Lavalink may use, plus the YouTube plugin's version and settings. Restart Lavalink after changing it. The password isn't in this file: `scripts/lavalink.mjs` passes it from `.env` when Lavalink starts.
+- **The website's Settings tab and Admin page**: everything that isn't a secret or a connection detail. Stored in `data/bot.db` (see [Settings and the database](#settings-and-the-database)).

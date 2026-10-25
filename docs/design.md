@@ -42,7 +42,7 @@ Browser ── HTTPS (CF Tunnel) ──▶ Node process (TypeScript)
 
 Slash commands and web routes are thin wrappers over the same `PlayerManager` methods. Every state change emits an event that the web layer forwards to that server's Socket.IO room. Neither UI keeps its own copy of the state, so Discord and the website always agree.
 
-Planned folders that don't exist yet: `src/db/` (connection, migrations, repositories), `src/library/` (upload pipeline, ffprobe/ffmpeg helpers), `src/web/` (Express app, auth, `routes/`, `socket.ts`, `permissions.ts`), `src/player/resolvers/ytdlp.ts` and `file.ts`, `web/` (React + Vite frontend), and `data/` (SQLite DB and `library/`, gitignored). Startup order in `src/index.ts`: config → db → Lavalink → bot → web.
+Planned folders that don't exist yet: `src/library/` (upload pipeline, ffprobe/ffmpeg helpers) and `src/player/resolvers/file.ts`. `data/` (gitignored) holds the SQLite database `bot.db`, the yt-dlp cache and, from milestone 8, `library/`. Startup order in `src/index.ts`: config → db → Lavalink → bot → web.
 
 ## Playback
 
@@ -52,7 +52,7 @@ A bot gets one voice connection per server. Lavalink owns that connection (the b
 ### Track model
 `TrackSource` and `QueueItem` live in [src/shared/types.ts](../src/shared/types.ts). The queue stores the **original input**. Display metadata (title, duration) is fetched when an item is added, but the item is resolved into a playable Lavalink track **only right before it plays**, because yt-dlp URLs and Discord CDN URLs expire.
 
-### YouTube resolution modes (built in milestone 3; becomes a global setting in milestone 6)
+### YouTube resolution modes (built in milestone 3; the owner's global setting since milestone 6)
 - `lavalink`: load the link through the `youtube-source` Lavalink plugin.
 - `ytdlp`: `yt-dlp -f "bestaudio[acodec=opus]/bestaudio" --no-playlist` downloads the audio to `data/ytdlp-cache/`, and Lavalink plays the file through its local source.
 - `auto` (default): try the plugin; if loading fails or the track errors, retry once with yt-dlp, from the position where playback stopped.
@@ -64,7 +64,7 @@ Notes:
 - yt-dlp needs a JavaScript runtime for YouTube; the bot passes its own Node.js (`--js-runtimes node:<path>`).
 - Metadata: `yt-dlp -J --no-playlist <url>`, or Lavalink's `loadTracks`.
 - YouTube playlist links (milestone 7): `yt-dlp --flat-playlist -J <url>` lists a playlist's videos without downloading them. See "Playlists" below.
-- yt-dlp lives in `bin/` (`npm run setup:ytdlp`) and is updated with `yt-dlp -U` on every start.
+- yt-dlp lives in `bin/` (`npm run setup:ytdlp`) and is updated with `yt-dlp -U` on every start (unless the owner turns that off), or with "Update now" on the Admin page.
 - Possible improvement: in `ytdlp` mode every song pauses ~10 s before starting; downloading the next queued song while the current one plays would remove the pause.
 - YouTube breaks downloaders regularly; that is why `auto` mode exists. The fix is usually updating yt-dlp and the YouTube plugin version in `lavalink/application.yml`.
 - Downloading from YouTube breaks its terms of service. That's acceptable for private use, so the bot stays private (no public bot listings).
@@ -88,7 +88,7 @@ The fallback for when the big services break: people can play files they already
 - Add the OAuth2 redirect `<PUBLIC_URL>/api/auth/callback` in the Developer Portal under OAuth2 → Redirects.
 - The dashboard lists servers where the user is a member **and** the bot is present, found by looking the user up in each of the bot's servers.
 - Changes must be sent as JSON; the server refuses anything else (415). Together with `sameSite=lax` this stops other websites from making changes through a logged-in browser.
-- **Until milestone 6** there's no way to set a DJ role, so every member counts as a DJ (`isDj()` in `src/permissions.ts`). Milestone 6 switches to the rule in the Decisions table: the DJ role if one is set, otherwise admins only.
+- The DJ rule (`isDj()` in `src/permissions.ts`): the server's DJ role if one is set, otherwise admins only. Picking the @everyone role (its id is the server's id) makes every member a DJ.
 - Permission levels:
   - **Bot owner** (`OWNER_ID` env): global settings, every server.
   - **Server admin** (Administrator or Manage Server in that server): that server's settings and all controls.
@@ -98,22 +98,24 @@ The fallback for when the big services break: people can play files they already
 - **Joining voice:** the bot joins the voice channel the requester is in (taken from the voice-state cache). From the website, the user must be in a voice channel on that server, otherwise reply "join a voice channel first".
 - Gateway intents: `Guilds`, `GuildVoiceStates` only (no privileged intents).
 
-## Configuration (milestone 6)
+## Configuration (built in milestone 6)
 
-**Global (bot owner, admin panel):**
+The types, defaults and allowed ranges live in [src/shared/settings.ts](../src/shared/settings.ts). `SettingsStore` reads them from SQLite on every use, so a change applies to the next command.
+
+**Global (bot owner, Admin page):**
 - `youtubeMode`: `auto` | `lavalink` | `ytdlp`
-- `maxUploadMb`, `guildQuotaMb`
-- yt-dlp auto-update on/off
-- Status view: Lavalink node health, yt-dlp version
+- `ytdlpAutoUpdate`: on/off, plus an "Update now" button
+- Status view: bot uptime and servers; Lavalink connection, version, YouTube plugin version, players and memory; yt-dlp version
+- Milestone 8 adds `maxUploadMb` and `guildQuotaMb` (left out until uploads exist, so the page has no settings that do nothing).
 
-**Per server (server admins):**
-- `djRoleId` (unset = only admins can control playback)
-- `defaultVolume`
-- `maxQueueLength`, `maxTrackDurationSec` (optional)
-- `uploadPermission`: `dj` | `admin` | `off`
-- `requireSameVoiceChannel`: whether controlling playback requires being in the bot's voice channel (default off)
-- `leaveWhenEmptyAfterSec`
-- `announceChannelId` (optional "now playing" messages)
+**Per server (server admins, Settings tab):**
+- `djRoleId` (unset = only admins can control playback; @everyone = every member)
+- `defaultVolume`: the volume the bot joins at
+- `maxQueueLength`, `maxTrackDurationSec` (optional; livestreams are exempt from the length limit)
+- `requireSameVoiceChannel`: while the bot is in a voice channel, DJs must be in it to control playback (default off; admins are exempt)
+- `leaveWhenEmptyAfterSec` (default 60; 0 = never leave)
+- `announceChannelId` (optional "Now playing" messages; a song repeating or retried with yt-dlp isn't announced again)
+- Milestone 8 adds `uploadPermission`: `dj` | `admin` | `off`.
 
 ## Keys & secrets
 
@@ -139,18 +141,19 @@ Possibly needed later:
 - **Spotify links:** would need the LavaSrc plugin plus a Spotify client ID and secret from the Spotify developer dashboard. Not in scope for now.
 - **Stable public URL:** Cloudflare quick tunnels (`trycloudflare.com`) get a new random URL on every restart, which breaks the OAuth redirect. A named tunnel needs a free Cloudflare account plus a domain on Cloudflare. Tailscale Funnel is a free alternative with a fixed `*.ts.net` URL. Point the tunnel (`cloudflared`) at `WEB_PORT` and use its URL as `PUBLIC_URL`.
 
-## Data (SQLite, milestone 6)
-- `global_settings(key PRIMARY KEY, value)`
-- `guild_settings(guild_id PRIMARY KEY, dj_role_id, default_volume, max_queue_length, upload_permission, require_same_vc, leave_after_sec, announce_channel_id, ...)`
-- `library_files(id, guild_id, uploaded_by, original_name, path, mime, duration_ms, size_bytes, created_at)`
-- `queue_items(guild_id, position, item_json)`: one row per `QueueItem`
-- `history_items(guild_id, played_at, item_json)`: the "Recently played" list (in memory until then, 20 per server)
-- `player_state(guild_id PRIMARY KEY, voice_channel_id, text_channel_id, current_item_json, position_ms, paused, volume, loop_mode, updated_at)`
+## Data (SQLite, built in milestone 6)
+`data/bot.db`, opened with `better-sqlite3` in WAL mode. The tables are created by numbered migrations in [src/db/migrations.ts](../src/db/migrations.ts); SQLite's `user_version` counts how many have run.
+- `global_settings(key PRIMARY KEY, value)`: the value is JSON
+- `guild_settings(guild_id PRIMARY KEY, dj_role_id, default_volume, max_queue_length, max_track_duration_sec, require_same_vc, leave_after_sec, announce_channel_id)`: no row = the defaults
+- `player_state(guild_id PRIMARY KEY, voice_channel_id, text_channel_id, current_item_json, position_ms, paused, volume, loop_mode, filter, updated_at)`
+- `queue_items(guild_id, position, item_json)`: one row per `QueueItem`; position 1 plays next
+- `history_items(guild_id, position, item_json)`: "Recently played"; position 1 is the newest (20 per server)
+- Milestone 8 adds `library_files(id, guild_id, uploaded_by, original_name, path, mime, duration_ms, size_bytes, created_at)`; milestone 7 the playlist tables (see "Playlists").
 
-### Queue persistence
-- The working copy stays in memory (`Map<guildId, GuildPlayer>`). Every queue or player change is also written to SQLite in the same call (`better-sqlite3` is synchronous and fast enough).
-- Save `position_ms` on pause, skip and stop, and every few seconds while playing, so a crash loses at most a few seconds.
-- **On startup:** load every saved guild. If its saved voice channel still has people in it, rejoin and resume the current track from `position_ms`. Otherwise restore the queue paused and wait for `/resume` or `/play`.
+### Queue persistence (built in milestone 6)
+- The working copy stays in memory (`Map<guildId, GuildPlayer>`). Every change to the track or the queue rewrites that server's saved state in one transaction; every status change (including Lavalink's once-a-second position update) updates `player_state`. A crash loses about a second.
+- On shutdown (Ctrl+C), saving stops before the bot leaves voice, so leaving doesn't save "nothing playing". A killed process needs no shutdown step: everything was already written.
+- **On startup:** every saved server is loaded at once, and a track that was playing becomes *interrupted* (the website shows "Stopped by a restart"). Once Discord and a Lavalink session are ready, the bot rejoins the saved voice channel and continues from `position_ms` if people are still in it and the track wasn't paused. Otherwise it waits for `/resume` or `/play`, which join the requester's channel and continue it.
 - Restored items are re-resolved when they play, as usual, so expired URLs don't matter.
 - Nice to have: `lavalink-client` session resuming, so a restart of just the bot process doesn't interrupt audio at all while Lavalink keeps running.
 
@@ -219,15 +222,19 @@ POST   /guilds/:id/player/volume   (dj) { volume }
 POST   /guilds/:id/player/loop     (dj) { mode }
 POST   /guilds/:id/player/filter   (dj) { filter }
 ```
+Built in milestone 6 (`GET /me` also gained `isOwner`, and DJ routes enforce `requireSameVoiceChannel`):
+```
+GET    /guilds/:id/settings        (admin) the settings, plus the roles and text channels to pick from
+PATCH  /guilds/:id/settings        (admin) any subset of the settings, checked with zod
+GET    /admin/settings             (owner)
+PATCH  /admin/settings             (owner)
+GET    /admin/status               (owner)
+POST   /admin/ytdlp/update         (owner) update yt-dlp now
+```
 Planned:
 ```
 GET    /guilds/:id/playlists ...   (milestone 7, see "Playlists")
 GET    /guilds/:id/library
 POST   /guilds/:id/library         (multipart upload)
 DELETE /guilds/:id/library/:fileId
-GET    /guilds/:id/settings        (admin)
-PATCH  /guilds/:id/settings        (admin)
-GET    /admin/settings             (owner)
-PATCH  /admin/settings             (owner)
-GET    /admin/status               (owner)
 ```

@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import type { LavalinkManager } from "lavalink-client";
+import type { PlayerStateStore, SavedPlayer, SavedStatus } from "../db/playerStateStore.js";
+import type { SettingsStore } from "../db/settingsStore.js";
+import { formatDuration } from "../shared/format.js";
 import type { AudioFilter, LoopMode, PlayerSnapshot, QueueItem, Requester } from "../shared/types.js";
 import { UserError } from "./errors.js";
 import { GuildPlayer } from "./GuildPlayer.js";
-import { fetchMetadata, parseInput } from "./resolvers/index.js";
-
-/** How long the bot stays in a voice channel with no listeners before leaving. Becomes `leaveWhenEmptyAfterSec` in milestone 6. */
-const LEAVE_WHEN_EMPTY_AFTER_MS = 60_000;
+import { fetchMetadata, parseInput, type TrackMetadata } from "./resolvers/index.js";
 
 /**
  * Events PlayerManager emits whenever something changes. The bot posts "error" in Discord;
@@ -33,6 +33,9 @@ export interface PlayRequest {
   textChannelId: string | null;
 }
 
+/** Where the person asking is: their voice channel (to join it) and the text channel (for errors later). */
+export type VoiceRequest = Pick<PlayRequest, "voiceChannelId" | "textChannelId">;
+
 /**
  * The one place that controls playback, for every server.
  *
@@ -44,9 +47,21 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
   private readonly players = new Map<string, GuildPlayer>();
   /** Servers where the bot is alone in voice, and the timer that will make it leave. */
   private readonly leaveTimers = new Map<string, NodeJS.Timeout>();
+  /** Turned off while shutting down, so leaving voice doesn't save every server as "nothing playing". */
+  private saving = true;
 
-  constructor(readonly lavalink: LavalinkManager) {
+  /**
+   * Loads what every server was playing before the bot stopped, straight away: a command that arrives early
+   * then continues the saved queue instead of starting a new one. Rejoining voice happens later, in
+   * `rejoinAfterRestart()`, once Discord and Lavalink are connected.
+   */
+  constructor(
+    readonly lavalink: LavalinkManager,
+    readonly settings: SettingsStore,
+    private readonly store: PlayerStateStore,
+  ) {
     super();
+    for (const saved of store.loadAll()) this.getOrCreatePlayer(saved.guildId).restore(saved);
     this.listenToLavalink();
   }
 
@@ -59,9 +74,12 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
     const player = this.getOrCreatePlayer(guildId);
 
     // Join voice before loading the link, so "join a voice channel first" comes back immediately.
+    // After a restart this also continues the interrupted track.
     await player.run(() => player.ensureConnected(request.voiceChannelId, request.textChannelId));
 
-    const { meta, track } = await fetchMetadata(this.lavalink, source, request.requestedBy);
+    const youtubeMode = this.settings.global().youtubeMode;
+    const { meta, track } = await fetchMetadata(this.lavalink, source, request.requestedBy, youtubeMode);
+    this.checkDurationLimit(guildId, meta);
     const item: QueueItem = { id: randomUUID(), source, ...meta, requestedBy: request.requestedBy };
 
     const { position } = await player.run(() => player.enqueue(item, track));
@@ -90,9 +108,10 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
     await player.run(() => player.pause());
   }
 
-  async resume(guildId: string): Promise<void> {
+  /** Resumes the paused track. After a restart, continues the interrupted track in the requester's voice channel. */
+  async resume(guildId: string, request: VoiceRequest): Promise<void> {
     const player = this.requirePlayer(guildId);
-    await player.run(() => player.resume());
+    await player.run(() => player.resume(request.voiceChannelId, request.textChannelId));
   }
 
   async setVolume(guildId: string, volume: number): Promise<void> {
@@ -143,7 +162,8 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
       current: null,
       positionMs: 0,
       paused: false,
-      volume: 100,
+      interrupted: false,
+      volume: this.settings.guild(guildId).defaultVolume,
       loopMode: "off",
       filter: "off",
       queue: [],
@@ -153,8 +173,8 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
 
   /**
    * Tells the manager how many people (not counting bots) are in the bot's voice channel.
-   * The bot calls this whenever someone joins, leaves or moves. With nobody left, the bot waits
-   * LEAVE_WHEN_EMPTY_AFTER_MS and then stops and leaves, unless someone comes back first.
+   * The bot calls this whenever someone joins, leaves or moves. With nobody left, the bot waits for the
+   * server's `leaveWhenEmptyAfterSec` setting and then stops and leaves, unless someone comes back first.
    */
   updateListenerCount(guildId: string, listeners: number): void {
     const pendingLeave = this.leaveTimers.get(guildId);
@@ -167,11 +187,59 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
     const isInVoice = this.players.get(guildId)?.voiceChannelId;
     if (pendingLeave || !isInVoice) return;
 
+    const delaySec = this.settings.guild(guildId).leaveWhenEmptyAfterSec;
+    if (delaySec === 0) return; // 0 = never leave
+
     const timer = setTimeout(() => {
       this.leaveTimers.delete(guildId);
       this.stop(guildId).catch((error) => this.emit("error", guildId, null, error));
-    }, LEAVE_WHEN_EMPTY_AFTER_MS);
+    }, delaySec * 1000);
     this.leaveTimers.set(guildId, timer);
+  }
+
+  /**
+   * After a restart, rejoins the voice channels where the bot was playing and continues the songs from where
+   * they stopped, but only where people are still listening (`hasListeners` asks Discord) and the song wasn't
+   * paused. Everywhere else the song waits, paused, for /resume or /play. Needs Lavalink to be connected.
+   */
+  async rejoinAfterRestart(hasListeners: (guildId: string, voiceChannelId: string) => boolean): Promise<void> {
+    for (const player of this.players.values()) {
+      const interrupted = player.interrupted;
+      if (!interrupted?.voiceChannelId || interrupted.wasPaused) continue;
+      if (!hasListeners(player.guildId, interrupted.voiceChannelId)) continue;
+
+      console.log(`[player] ${player.guildId}: continuing "${player.current?.title}" after the restart`);
+      // Through run(), in case someone used /play or /resume in the meantime; then there's nothing left to do.
+      await player
+        .run(() => player.ensureConnected(interrupted.voiceChannelId, interrupted.textChannelId))
+        .catch((error) => this.emit("error", player.guildId, player.current, error));
+    }
+  }
+
+  /** Called when the bot shuts down, before it leaves voice. Keeps the saved state as it is for the next start. */
+  stopSaving(): void {
+    this.saving = false;
+  }
+
+  /** Saves a server's whole playback state. Called by GuildPlayer whenever the track or the queue changes. */
+  saveState(state: SavedPlayer): void {
+    if (this.saving) this.store.save(state);
+  }
+
+  /** Saves the position, pause, volume, loop mode and effect. Called by GuildPlayer about once a second while playing. */
+  saveStatus(status: SavedStatus): void {
+    if (this.saving) this.store.saveStatus(status);
+  }
+
+  /** Refuses songs longer than the server's `maxTrackDurationSec` setting. Livestreams have no length and are allowed. */
+  private checkDurationLimit(guildId: string, meta: TrackMetadata): void {
+    const limitSec = this.settings.guild(guildId).maxTrackDurationSec;
+    if (limitSec === null || meta.durationMs === undefined) return;
+    if (meta.durationMs > limitSec * 1000) {
+      throw new UserError(
+        `That song is ${formatDuration(meta.durationMs)} long; this server allows songs up to ${formatDuration(limitSec * 1000)}.`,
+      );
+    }
   }
 
   private cancelLeaveTimer(guildId: string): void {
@@ -214,10 +282,10 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
     });
 
     // Lavalink reports the playback position about once a second (`playerUpdateInterval` in application.yml).
-    // Passing it on keeps the website's progress bar in sync.
+    // Passing it on keeps the website's progress bar in sync, and saves the position (GuildPlayer.emitPlayerUpdate).
     this.lavalink.on("playerUpdate", (_oldState, lavalinkPlayer) => {
       const player = this.players.get(lavalinkPlayer.guildId);
-      if (player?.current) this.emit("player:update", lavalinkPlayer.guildId, player.snapshot());
+      if (player?.current) player.emitPlayerUpdate();
     });
 
     this.lavalink.on("trackStuck", (lavalinkPlayer) => {
