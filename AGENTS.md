@@ -21,7 +21,7 @@ Build them in order. Each milestone works end to end in Discord before the next 
 2. **Player features:** pause/resume, remove/move, loop, shuffle, volume, leave automatically when the channel is empty. *(written; the owner has used parts of it)*
 3. **YouTube resolver modes:** yt-dlp resolver and `auto` fallback (mode hardcoded for now). *(written)*
 4. **Read-only web view:** Express + Socket.IO + React page showing the current track and the queue live (localhost, no auth yet). *(working)*
-5. **Auth + web controls:** Discord OAuth, server list, permission checks, and the website's controls: adding links, pause/resume, skip, stop, seek, volume, loop, effects, reorder and remove; plus song history. *(written)*
+5. **Auth + web controls:** Discord OAuth, server list, permission checks, and the website's controls: adding links, pause/resume, skip, stop, seek, volume, loop, effects, reorder and remove; plus song history. *(working)*
 6. **Settings + persistence:** SQLite, per-server settings page (DJ role!), owner admin panel (YouTube mode, limits, status), queues and history restored after restart.
 7. **Playlists:** per-server saved playlists that members add to and DJs play (replacing the queue), importing YouTube playlists, saving the queue as a playlist. See "Playlists" in docs/design.md.
 8. **Library:** `/play file:`, website uploads, ffprobe/ffmpeg pipeline, library browser.
