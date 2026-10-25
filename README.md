@@ -61,7 +61,7 @@ Copy `.env.example` to `.env` if you don't have one yet, then fill in:
 | `DISCORD_TOKEN` | The bot token from step 3 |
 | `DISCORD_CLIENT_ID` | Developer Portal → your app → **General Information** → Application ID |
 | `LAVALINK_PASSWORD` | Any long random string. The bot and Lavalink both read it from here. |
-| `DEV_GUILD_ID` (optional) | Your server's ID (turn on Developer Mode in Discord, right-click the server → Copy Server ID). Slash commands then register only in that server, but show up instantly. |
+| `DEV_GUILD_ID` (optional) | Your server's ID (turn on Developer Mode in Discord, right-click the server → Copy Server ID). Slash commands then register only in that server and show up there instantly, but disappear from your other servers until you empty it again. |
 
 The other variables are for the website and can stay empty for now.
 
@@ -94,7 +94,7 @@ Other scripts:
 - **"npm.ps1 cannot be loaded because running scripts is disabled"** in PowerShell: Windows blocks PowerShell scripts by default. Either run `npm.cmd run ...` instead of `npm run ...`, or allow local scripts once with `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` (or use Command Prompt instead of PowerShell).
 - **`Invalid .env`** when starting: the message lists which variables are missing.
 - **"The audio server (Lavalink) isn't connected"**: Lavalink isn't running, or `LAVALINK_PASSWORD` / `LAVALINK_PORT` don't match. Start it with `npm run lavalink` (not `java -jar` directly), because that script passes the password from `.env`. The bot keeps retrying every 5 seconds, so there's no need to restart it.
-- **Slash commands don't show up**: global commands can take a while to appear. Set `DEV_GUILD_ID` for instant updates while developing.
+- **New slash commands don't show up**: the Discord app caches the command list. Press **Ctrl+R** in Discord to reload it (or fully quit and reopen it). If they're still missing, check the bot's console for `registered N global commands`. Setting `DEV_GUILD_ID` makes updates instant in that one server.
 - **"YouTube refused to play this video"** (the title loads, then playback fails): YouTube regularly blocks the clients Lavalink's YouTube plugin pretends to be. The bot's console shows which clients failed and why. The usual fix is a newer plugin version in `lavalink/application.yml` (see [youtube-source releases](https://github.com/lavalink-devs/youtube-source/releases)), or changing the order of `clients` there, then restarting Lavalink. The comments in that file record what was tested last.
 - **SoundCloud links fail** with "Something went wrong while looking up the track": a bug in Lavalink 4.2.2's SoundCloud support. The yt-dlp fallback (milestone 3) is planned to cover it.
 - Lavalink's own logs are in `lavalink/logs/`.

@@ -1,0 +1,55 @@
+Test links for the bot. Paste one into /play at a time.
+All YouTube links below streamed fine through Lavalink on 2026-10-25.
+
+
+DIXON DALLAS
+------------
+Good Lookin' (2:47)               https://www.youtube.com/watch?v=9wOUMEVd2XY
+Good Lookin', live video (3:23)   https://www.youtube.com/watch?v=NdtaVBTSMRU
+Like Whiskey (2:11)               https://www.youtube.com/watch?v=BAfn52jAchI
+Something To Feel (2:39)          https://www.youtube.com/watch?v=wZmxOpNfxms
+F150 (2:37)                       https://www.youtube.com/watch?v=TvO8OS4iEzU
+Beggin' For More (3:21)           https://www.youtube.com/watch?v=o9wet3Ta5yg
+Fool For You (3:48)               https://www.youtube.com/watch?v=hRrmb30z2dE
+Kinda Crazy (2:12)                https://www.youtube.com/watch?v=ewXurjJE3Qg
+This Is Love (3:08)               https://www.youtube.com/watch?v=6ZCCPrKpiJU
+Like Honey                        https://www.youtube.com/watch?v=09EDshR78EM
+
+
+OTHER PRETTY SONGS
+------------------
+Fleetwood Mac - Dreams (4:24)                    https://www.youtube.com/watch?v=Y3ywicffOj4
+The Cranberries - Linger (4:35)                  https://www.youtube.com/watch?v=G6Kspj3OO0s
+Cigarettes After Sex - Apocalypse (4:51)         https://www.youtube.com/watch?v=sElE_BfQ67s
+Mac DeMarco - Chamber Of Reflection (3:52)       https://www.youtube.com/watch?v=MJoSyNdffGo
+Bon Iver - Holocene (5:44)                       https://www.youtube.com/watch?v=TWcyIpul8OE
+Hozier - Cherry Wine (4:14)                      https://www.youtube.com/watch?v=SdSCCwtNEjA
+Beach House - Space Song (5:21)                  https://www.youtube.com/watch?v=RBtlPT23PTM
+Lord Huron - The Night We Met (3:29)             https://www.youtube.com/watch?v=KtlgYxa6BMU
+
+
+FOR TESTING SPECIFIC THINGS
+---------------------------
+Very short video, good for /loop and the queue moving on (0:19)
+  https://www.youtube.com/watch?v=jNQXAC9IVRw
+
+Direct MP3 file (not YouTube; shows up as "Unknown title")
+  https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3
+
+These SHOULD fail, to check the error messages:
+  SoundCloud (broken in Lavalink 4.2.2)   https://soundcloud.com/forss/flickermood
+  YouTube video that doesn't exist        https://www.youtube.com/watch?v=aaaaaaaaaaa
+  Not a link                              dixon dallas good lookin
+
+
+A QUICK MILESTONE 2 TEST RUN
+----------------------------
+1. Join a voice channel. /play Good Lookin', then queue Like Whiskey, F150, Kinda Crazy and Dreams.
+2. /queue to see the numbers. /move from:4 to:1, then /queue again.
+3. /remove position:2, then /shuffle, checking /queue after each.
+4. /pause, wait a few seconds, /resume. Then /pause and /skip: the next song should start playing, not stay paused.
+5. /volume percent:50, then /volume with no number to see it.
+6. /stop. /play the 19-second video, then /loop mode:track and let it end: it should start again.
+7. Queue two or three more songs, /loop mode:queue, and /skip a few times: skipped songs go to the end of
+   /queue instead of disappearing.
+8. Leave the voice channel and wait 60 seconds: the bot should leave too.
