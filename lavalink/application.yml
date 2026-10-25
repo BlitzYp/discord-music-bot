@@ -1,0 +1,53 @@
+# Lavalink v4 config. Start with: npm run lavalink (from the project root)
+# The password and port come from .env (LAVALINK_PASSWORD, LAVALINK_PORT); see scripts/lavalink.mjs.
+server:
+  port: 2333
+  address: 127.0.0.1   # only reachable from this machine
+
+lavalink:
+  plugins:
+    # An unreleased snapshot build (main branch, 2026-09-17), because the latest release (1.18.2) can no longer
+    # play most YouTube videos. Switch back to a release once one newer than 1.18.2 is out:
+    # https://github.com/lavalink-devs/youtube-source/releases
+    - dependency: "dev.lavalink.youtube:youtube-plugin:2be8e542d3f6f178e048dca565892684c2e40177"
+      snapshot: true
+  server:
+    password: "set-from-.env"   # overridden by LAVALINK_PASSWORD via scripts/lavalink.mjs
+    sources:
+      youtube: false   # replaced by the plugin
+      soundcloud: true
+      bandcamp: true
+      twitch: true
+      vimeo: true
+      http: true       # needed for yt-dlp URLs and direct links
+      local: true      # needed for library files
+    bufferDurationMs: 400
+    frameBufferDurationMs: 5000
+    playerUpdateInterval: 1
+
+plugins:
+  youtube:
+    enabled: true
+    allowSearch: true
+    allowDirectVideoIds: true
+    allowDirectPlaylistIds: true
+    # Clients are tried in this order. Tested 2026-10-25: IOS played every regular video we tried;
+    # ANDROID_VR only some; WEB/WEBEMBEDDED fail on YouTube's signature cipher (fixable with a remote
+    # cipher server, see the youtube-source README). MUSIC is only used for search.
+    clients:
+      - MUSIC
+      - IOS
+      - ANDROID_VR
+      - WEB
+      - WEBEMBEDDED
+    clientOptions:
+      IOS:
+        # Searching through IOS returns nothing (youtube-source issue #247); WEB handles search instead.
+        searching: false
+
+logging:
+  file:
+    path: ./logs/
+  level:
+    root: INFO
+    lavalink: INFO

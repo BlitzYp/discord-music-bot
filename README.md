@@ -1,2 +1,116 @@
-# discord-music-bot
-A discord bot for playing music
+# Discord Music Bot
+
+A self-hosted Discord bot that plays music in voice channels. Audio is played by [Lavalink](https://lavalink.dev), a separate Java server that runs next to the bot on the same machine.
+
+**Status:** milestone 1 of 8 (see the milestones in [AGENTS.md](AGENTS.md)). Slash commands only; the website comes later.
+
+- [How it works](docs/how-it-works.md): a tour of the code, and how to add a command
+- [Design](docs/design.md): the full design and the decisions behind it
+- [AGENTS.md](AGENTS.md): instructions for AI coding agents (Claude Code reads it through `CLAUDE.md`)
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `/play <link>` | Joins your voice channel and plays the link, or adds it to the queue if something is already playing |
+| `/skip` | Skips to the next track |
+| `/stop` | Stops playback, clears the queue and leaves the voice channel |
+| `/queue` | Shows the current track and what's coming up |
+
+Supported links: YouTube, Bandcamp, Twitch, Vimeo and direct audio file URLs. SoundCloud is currently broken in Lavalink 4.2.2 (see [Troubleshooting](#troubleshooting)). Searching by song name isn't supported yet.
+
+## Setup (Windows)
+
+### 1. Install the prerequisites
+
+You need Node.js (LTS) and Java 17 or newer. yt-dlp and ffmpeg aren't used yet, but later milestones need them.
+
+```
+winget install OpenJS.NodeJS.LTS EclipseAdoptium.Temurin.21.JDK yt-dlp.yt-dlp Gyan.FFmpeg
+```
+
+### 2. Install the project
+
+```
+npm install
+npm run setup:lavalink
+```
+
+`setup:lavalink` downloads `lavalink/Lavalink.jar`. Lavalink downloads its YouTube plugin by itself the first time it starts.
+
+### 3. Create the Discord application
+
+1. Go to the [Discord Developer Portal](https://discord.com/developers/applications) and create an application.
+2. Under **Bot**, click **Reset Token** and copy the token.
+3. Under **OAuth2 → URL Generator**, tick the scopes `bot` and `applications.commands`, then the permissions View Channels, Connect, Speak, Send Messages and Embed Links. Open the generated URL to invite the bot to your server.
+
+### 4. Fill in `.env`
+
+Copy `.env.example` to `.env` if you don't have one yet, then fill in:
+
+| Variable | Where to find it |
+|---|---|
+| `DISCORD_TOKEN` | The bot token from step 3 |
+| `DISCORD_CLIENT_ID` | Developer Portal → your app → **General Information** → Application ID |
+| `LAVALINK_PASSWORD` | Any long random string. The bot and Lavalink both read it from here. |
+| `DEV_GUILD_ID` (optional) | Your server's ID (turn on Developer Mode in Discord, right-click the server → Copy Server ID). Slash commands then register only in that server, but show up instantly. |
+
+The other variables are for the website and can stay empty for now.
+
+## Running
+
+You need two terminals: one for Lavalink, one for the bot.
+
+```
+npm run lavalink
+```
+
+Wait for `Lavalink is ready to accept connections`, then:
+
+```
+npm run dev
+```
+
+`dev` restarts the bot whenever you save a file. When you see `logged in as ...` and `node "main" connected`, join a voice channel and run `/play` with a YouTube link.
+
+Other scripts:
+
+| Script | What it does |
+|---|---|
+| `npm run typecheck` | Checks the TypeScript for errors without running anything |
+| `npm run build` | Compiles to `dist/` |
+| `npm start` | Runs the compiled bot from `dist/` (use this instead of `dev` for day-to-day hosting) |
+
+## Troubleshooting
+
+- **"npm.ps1 cannot be loaded because running scripts is disabled"** in PowerShell: Windows blocks PowerShell scripts by default. Either run `npm.cmd run ...` instead of `npm run ...`, or allow local scripts once with `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` (or use Command Prompt instead of PowerShell).
+- **`Invalid .env`** when starting: the message lists which variables are missing.
+- **"The audio server (Lavalink) isn't connected"**: Lavalink isn't running, or `LAVALINK_PASSWORD` / `LAVALINK_PORT` don't match. Start it with `npm run lavalink` (not `java -jar` directly), because that script passes the password from `.env`. The bot keeps retrying every 5 seconds, so there's no need to restart it.
+- **Slash commands don't show up**: global commands can take a while to appear. Set `DEV_GUILD_ID` for instant updates while developing.
+- **"YouTube refused to play this video"** (the title loads, then playback fails): YouTube regularly blocks the clients Lavalink's YouTube plugin pretends to be. The bot's console shows which clients failed and why. The usual fix is a newer plugin version in `lavalink/application.yml` (see [youtube-source releases](https://github.com/lavalink-devs/youtube-source/releases)), or changing the order of `clients` there, then restarting Lavalink. The comments in that file record what was tested last.
+- **SoundCloud links fail** with "Something went wrong while looking up the track": a bug in Lavalink 4.2.2's SoundCloud support. The yt-dlp fallback (milestone 3) is planned to cover it.
+- Lavalink's own logs are in `lavalink/logs/`.
+
+## Project layout
+
+```
+src/
+  index.ts              Starts everything: config → Lavalink → Discord bot
+  config.ts             Reads and checks .env
+  bot/
+    client.ts           The discord.js client
+    commands/           One file per slash command
+    events/             Discord event handlers (ready, slash commands, playback errors)
+    format.ts           Formatting helpers for Discord messages
+  player/
+    PlayerManager.ts    The one entry point for playback; commands call this
+    GuildPlayer.ts      One server's current track and queue
+    lavalink.ts         Connection to the Lavalink server
+    resolvers/          Turns a link into a track Lavalink can play
+    errors.ts           UserError: errors whose message is shown to users
+  shared/types.ts       Types shared with the future website
+lavalink/
+  application.yml       Lavalink settings (sources, YouTube plugin)
+scripts/                Helpers for downloading and starting Lavalink
+docs/                   Longer explanations
+```
