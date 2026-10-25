@@ -136,7 +136,9 @@ const UNAVAILABLE_TITLES = new Set(["[Private video]", "[Deleted video]"]);
  * Uses yt-dlp, which lists them without downloading anything. Private and deleted videos are left out.
  */
 export async function listPlaylist(url: string, limit: number): Promise<{ title: string; entries: PlaylistEntry[] }> {
-  const playlist = await fetchPlaylist(url, limit);
+  const playlist = await fetchPlaylist(url, limit).catch((error: unknown) => {
+    throw explainPlaylistError(url, error);
+  });
   const entries: PlaylistEntry[] = [];
   for (const entry of playlist.entries ?? []) {
     if (!entry.url || !entry.title || UNAVAILABLE_TITLES.has(entry.title)) continue;
@@ -157,8 +159,36 @@ export async function listPlaylist(url: string, limit: number): Promise<{ title:
       },
     });
   }
+  // A personal mix opened from one of its songs (`watch?v=...&list=RD...`) loads, but with only that one song,
+  // because the rest is only shown to its signed-in owner. A real mix has dozens.
+  const isMix = new URL(url).searchParams.get("list")?.startsWith("RD") ?? false;
+  if (isMix && entries.length <= 1) throw personalMixError();
   if (entries.length === 0) throw new UserError("No playable songs were found in that playlist.");
   return { title: playlist.title || "Imported playlist", entries };
+}
+
+/** A new error each time, so each one has its own stack trace. */
+const personalMixError = () =>
+  new UserError(
+  "That's a YouTube mix made for your account (like Replay Mix or My Supermix), and YouTube only shows those " +
+    "to you when you're signed in, so the bot can't read it. To keep its songs, save the mix as a playlist in " +
+    "YouTube (⋮ → Save to playlist), make that playlist Public or Unlisted, and import it.",
+);
+
+/**
+ * YouTube answers "The playlist does not exist" for any playlist it won't show to a logged-out visitor, which
+ * the bot always is. Two common cases get a message that says what to do instead:
+ * - Personal mixes (Replay Mix, My Supermix, Discover Mix…): their ids start with "RD" and they exist only for
+ *   the signed-in owner. Mixes started from a song (`watch?v=...&list=RD...`) are public and do work.
+ * - Private playlists.
+ */
+function explainPlaylistError(url: string, error: unknown): unknown {
+  const doesNotExist = error instanceof Error && error.message.includes("The playlist does not exist");
+  if (!doesNotExist) return error;
+
+  const listId = new URL(url).searchParams.get("list") ?? "";
+  if (listId.startsWith("RD")) return personalMixError();
+  return new UserError("YouTube says that playlist doesn't exist. If it's yours, set it to Public or Unlisted (not Private).");
 }
 
 function largestThumbnail(thumbnails: { url: string; width?: number }[] | undefined): string | undefined {
