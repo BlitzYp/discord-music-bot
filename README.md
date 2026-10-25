@@ -22,6 +22,7 @@ A self-hosted Discord bot that plays music in voice channels. Audio is played by
 | `/shuffle` | Shuffles the queue; the current track keeps playing |
 | `/loop off\|track\|queue` | Repeats nothing, the current track, or the whole queue |
 | `/volume [percent]` | Shows or sets the volume, 0–150% (100 is normal). Resets to 100% when the bot leaves. |
+| `/filter <effect>` | Adds an audio effect: nightcore, vaporwave, bassboost, 8d, karaoke or soft (`off` removes it). One at a time; it stays on for the next songs until changed or the bot leaves. |
 
 The bot leaves the voice channel by itself, clearing the queue, after being alone in it for 60 seconds.
 

@@ -87,6 +87,12 @@ Users see queue positions: the numbers in `/queue`, where 1 is the next track. `
 
 `bot/events/voiceStateUpdate.ts` watches people joining and leaving voice channels. Whenever the bot's channel changes, it counts the people in it (bots don't count) and calls `players.updateListenerCount()`. When the count hits 0, `PlayerManager` starts a 60-second timer (`LEAVE_WHEN_EMPTY_AFTER_MS`). If someone joins in time, the timer is cancelled; otherwise the bot does a normal `/stop`. In milestone 6 the delay becomes the per-server `leaveWhenEmptyAfterSec` setting.
 
+### Audio filters
+
+`/filter` effects are built into Lavalink; the bot only picks settings. `src/player/filters.ts` maps each name to `lavalink-client` helpers (nightcore and vaporwave change speed and pitch, bassboost is an equalizer preset, 8d is rotation, and so on). `applyFilter()` first resets everything, so exactly one effect is ever active. Lavalink keeps filters on the player, so they carry over to the next songs; a new player (after the bot leaves voice) starts without effects, which is why `GuildPlayer.reset()` sets `filter` back to `off`.
+
+To add an effect: add its name to `AUDIO_FILTERS` in `src/shared/types.ts`, then add a description and a `case` in `src/player/filters.ts`. The command's choices are built from that list.
+
 ### `run()`: one change at a time
 
 Every change to a `GuildPlayer` goes through `player.run(() => ...)`. That waits for the previous change in that server to finish before starting the next one. Without it, a `/skip` arriving at the same moment a track ends by itself could advance the queue twice.

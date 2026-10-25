@@ -1,6 +1,7 @@
 import type { Player, Track, TrackEndReason } from "lavalink-client";
-import type { LoopMode, PlayerSnapshot, QueueItem } from "../shared/types.js";
+import type { AudioFilter, LoopMode, PlayerSnapshot, QueueItem } from "../shared/types.js";
 import { UserError } from "./errors.js";
+import { applyFilter } from "./filters.js";
 import type { PlayerManager } from "./PlayerManager.js";
 import { fallbackMethod, type ResolveMethod, resolvePlayable } from "./resolvers/index.js";
 
@@ -32,6 +33,7 @@ export class GuildPlayer {
   /** Items waiting to play, in order. Does not include `current`. */
   queue: QueueItem[] = [];
   loopMode: LoopMode = "off";
+  filter: AudioFilter = "off";
 
   /** The tail of the task queue used by `run()`. */
   private lastTask: Promise<unknown> = Promise.resolve();
@@ -187,6 +189,15 @@ export class GuildPlayer {
     this.emitPlayerUpdate();
   }
 
+  /** Switches to an audio effect ("off" removes it). It stays on for the following tracks until changed. */
+  async setFilter(filter: AudioFilter): Promise<void> {
+    const player = this.lavalinkPlayer;
+    if (!player) throw new UserError("Not connected to a voice channel.");
+    await applyFilter(player, filter);
+    this.filter = filter;
+    this.emitPlayerUpdate();
+  }
+
   // ---------------------------------------------------------------------------------------------
   // Editing the queue
   // ---------------------------------------------------------------------------------------------
@@ -290,6 +301,7 @@ export class GuildPlayer {
     this.setCurrent(null, null);
     this.queue = [];
     this.loopMode = "off";
+    this.filter = "off"; // a new Lavalink player starts without effects
     this.advanceAfterStuckTrack = false;
     this.pendingRetry = null;
     this.emitQueueUpdate();
@@ -306,6 +318,7 @@ export class GuildPlayer {
       paused: player?.paused ?? false,
       volume: player?.volume ?? DEFAULT_VOLUME,
       loopMode: this.loopMode,
+      filter: this.filter,
       queue: [...this.queue],
     };
   }

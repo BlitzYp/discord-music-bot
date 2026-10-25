@@ -25,6 +25,7 @@ export const queue: Command = {
 
     const footer = [`Volume ${state.volume}%`];
     if (state.loopMode !== "off") footer.push(`Looping ${state.loopMode}`);
+    if (state.filter !== "off") footer.push(`Effect: ${state.filter}`);
 
     if (state.queue.length > 0) {
       const lines = state.queue.slice(0, SHOWN).map((item, i) => `**${i + 1}.** ${formatItem(item)} · ${item.requestedBy.name}`);

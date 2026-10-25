@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import type { LavalinkManager } from "lavalink-client";
-import type { LoopMode, PlayerSnapshot, QueueItem, Requester } from "../shared/types.js";
+import type { AudioFilter, LoopMode, PlayerSnapshot, QueueItem, Requester } from "../shared/types.js";
 import { UserError } from "./errors.js";
 import { GuildPlayer } from "./GuildPlayer.js";
 import { fetchMetadata, parseInput } from "./resolvers/index.js";
@@ -16,7 +16,7 @@ const LEAVE_WHEN_EMPTY_AFTER_MS = 60_000;
 export interface PlayerManagerEvents {
   /** The current track or the queue changed. */
   "queue:update": [guildId: string, state: PlayerSnapshot];
-  /** Paused/resumed, volume or loop mode changed. */
+  /** Paused/resumed, volume, loop mode or filter changed. */
   "player:update": [guildId: string, state: PlayerSnapshot];
   "track:start": [guildId: string, item: QueueItem];
   "track:end": [guildId: string, item: QueueItem, reason: string];
@@ -105,6 +105,11 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
     await player.run(async () => player.setLoopMode(mode));
   }
 
+  async setFilter(guildId: string, filter: AudioFilter): Promise<void> {
+    const player = this.requirePlayer(guildId);
+    await player.run(() => player.setFilter(filter));
+  }
+
   /** Removes a queued item by its id. Returns the removed item. */
   async remove(guildId: string, itemId: string): Promise<QueueItem> {
     const player = this.requirePlayer(guildId);
@@ -134,6 +139,7 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
       paused: false,
       volume: 100,
       loopMode: "off",
+      filter: "off",
       queue: [],
     };
   }

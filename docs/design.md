@@ -160,7 +160,9 @@ Possibly needed later:
 ## Interfaces
 
 ### Slash commands
-`/play <query|url>` · `/play file:<attachment>` · `/skip` · `/stop` · `/pause` · `/resume` · `/queue` · `/nowplaying` · `/remove <pos>` · `/move <from> <to>` · `/shuffle` · `/loop off|track|queue` · `/volume <0-150>` · `/seek <time>` · `/library` · `/dashboard` (link to the website)
+`/play <query|url>` · `/play file:<attachment>` · `/skip` · `/stop` · `/pause` · `/resume` · `/queue` · `/nowplaying` · `/remove <pos>` · `/move <from> <to>` · `/shuffle` · `/loop off|track|queue` · `/volume <0-150>` · `/filter <effect>` · `/seek <time>` · `/library` · `/dashboard` (link to the website)
+
+`/filter` (added alongside milestone 3, at the owner's request) uses Lavalink's built-in filters: nightcore, vaporwave, bassboost, 8d, karaoke, soft, or off. One effect at a time, kept on the player until changed. The website should offer the same list (`AUDIO_FILTERS` in `src/shared/types.ts`).
 
 ### REST API (under `/api`, session required unless noted)
 ```
