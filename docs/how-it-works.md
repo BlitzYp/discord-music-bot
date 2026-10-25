@@ -182,6 +182,8 @@ The answer (`AddManyResult`) says how many songs were queued, too long, or past 
 - **The website** shows controls only to DJs (`hasLevel(guild.level, "dj")`), but that's just convenience: every change is checked again on the server.
 - Changes must be JSON (`requireJsonForChanges`), and the cookie is `sameSite=lax`. Together these stop another website from making changes through your logged-in browser.
 
+**Lists** (the queue, playlist songs, recently played) show each title with `SongTitle` (`web/src/components/SongTitle.tsx`), a link to the song's page that opens in a new tab. For DJs, the queue and playlist songs can be dragged to reorder: `useDragReorder()` (`web/src/useDragReorder.ts`) uses the browser's own drag and drop, draws a line where the row will land, and on drop calls the same move route as the ↑↓ buttons with the new position. Like every control, the row only moves once the bot's update arrives. Most phone browsers can't drag this way, so the ↑↓ buttons stay.
+
 **To show something new on the page:** if the information is already in `PlayerSnapshot`, just use it in a component in `web/src/components/`. If not, add it to `PlayerSnapshot` in `src/shared/types.ts`, fill it in `GuildPlayer.snapshot()` (and `PlayerManager.getState()` for servers with no player yet), and the compiler will point at anything else that needs updating.
 
 ## Settings and the database

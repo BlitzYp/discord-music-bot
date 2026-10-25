@@ -1,6 +1,7 @@
 import * as api from "../api";
 import { formatDuration, type QueueItem } from "../shared";
 import { useAction } from "../useAction";
+import { SongTitle } from "./SongTitle";
 
 interface Props {
   guildId: string;
@@ -36,7 +37,7 @@ export function HistoryList({ guildId, history, canControl }: Props) {
             <li key={item.id}>
               {item.thumbnail ? <img src={item.thumbnail} alt="" /> : <span className="thumb placeholder">♪</span>}
               <span className="info">
-                <span className="title">{item.title}</span>
+                <SongTitle className="title" title={item.title} source={item.source} />
                 <span className="muted">
                   {item.author ? `${item.author} · ` : ""}
                   {item.requestedBy.name}

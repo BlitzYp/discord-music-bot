@@ -119,10 +119,10 @@ npm run dev
 
 While the bot runs, open **http://localhost:3000** (or whatever `WEB_PORT` is) and log in with Discord. You see the servers you share with the bot; with more than one, pick one at the top. Everything updates live as things change in Discord.
 
-- **Everyone** sees the current song with its progress bar, the active effect, the queue, and the recently played songs.
-- **DJs** also get the controls: add a link, pause/resume, skip, stop, drag the progress bar to seek, volume, loop, effects, move ↑↓ or remove queued songs, shuffle, clear the queue (the current song keeps playing), and "Play again" on recently played songs or clear that list.
+- **Everyone** sees the current song with its progress bar, the active effect, the queue, and the recently played songs. Click a song's title to open it on YouTube (or wherever it's from) in a new tab.
+- **DJs** also get the controls: add a link, pause/resume, skip, stop, drag the progress bar to seek, volume, loop, effects, reorder queued songs by dragging them (or with ↑↓; dragging doesn't work on most phones), remove queued songs, shuffle, clear the queue (the current song keeps playing), and "Play again" on recently played songs or clear that list.
 - Adding a song from the website joins the voice channel you're in, like `/play`. When you paste a link from a YouTube playlist, a checkbox offers to add the whole playlist.
-- The **Playlists** tab (everyone) lists the server's playlists; click one to see its songs. Everyone can add songs and remove the ones they added. DJs also get **Play** (replaces the queue; it asks first if something is queued), **Add to queue**, ↑↓ to reorder, remove any song, **Rename**, **Delete**, a "New playlist" form (empty, or imported from a YouTube playlist link) and **Save the queue as a playlist**. Changes show up live for everyone, including ones made in Discord.
+- The **Playlists** tab (everyone) lists the server's playlists; click one to see its songs. Everyone can add songs and remove the ones they added. DJs also get **Play** (replaces the queue; it asks first if something is queued), **Add to queue**, dragging (or ↑↓) to reorder, remove any song, **Rename**, **Delete**, a "New playlist" form (empty, or imported from a YouTube playlist link) and **Save the queue as a playlist**. Changes show up live for everyone, including ones made in Discord.
 - **Server admins** get a **Settings** tab for that server:
 
   | Setting | What it does |

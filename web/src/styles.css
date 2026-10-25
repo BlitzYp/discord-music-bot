@@ -730,3 +730,31 @@ input[type="text"] {
   background: var(--bg);
   color: var(--text);
 }
+
+/* ---- Clickable titles and drag-to-reorder ---- */
+
+/* Song titles open the song's page; underlined only on hover so the lists stay calm. */
+.queue a.title {
+  text-decoration: none;
+}
+
+.queue a.title:hover {
+  text-decoration: underline;
+}
+
+.queue li[draggable="true"] {
+  cursor: grab;
+}
+
+.queue li.dragging {
+  opacity: 0.4;
+}
+
+/* Where a dragged row will land: a line above or below the row under the pointer. */
+.queue li.drop-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.queue li.drop-after {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}

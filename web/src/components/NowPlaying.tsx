@@ -3,6 +3,7 @@ import { type PlayerSnapshot, playbackRate } from "../shared";
 import { useNow } from "../useNow";
 import { PlayerControls } from "./PlayerControls";
 import { SeekBar } from "./SeekBar";
+import { SongTitle } from "./SongTitle";
 
 interface Props {
   guildId: string;
@@ -29,9 +30,9 @@ export function NowPlaying({ guildId, snapshot, receivedAt, canControl }: Props)
 
   // The bot sends the position about once a second; in between, count up from the last value.
   // Nightcore and vaporwave play the song faster or slower, so the bar has to move faster or slower too.
-  const elapsedSinceUpdate = snapshot.paused ? 0 : (now - receivedAt) * playbackRate(snapshot.filter);
+  // `now` ticks once a second, so right after an update it can be a moment older than `receivedAt`: never go below 0.
+  const elapsedSinceUpdate = snapshot.paused ? 0 : Math.max(0, now - receivedAt) * playbackRate(snapshot.filter);
   const position = Math.min(snapshot.positionMs + elapsedSinceUpdate, item.durationMs ?? Infinity);
-  const link = item.source.kind === "file" ? undefined : item.source.url;
 
   return (
     <section className="card now-playing">
@@ -41,13 +42,7 @@ export function NowPlaying({ guildId, snapshot, receivedAt, canControl }: Props)
         <div className="details">
           <p className="label">{snapshot.interrupted ? "Stopped by a restart" : snapshot.paused ? "Paused" : "Now playing"}</p>
           <h2 className="title">
-            {link ? (
-              <a href={link} target="_blank" rel="noreferrer">
-                {item.title}
-              </a>
-            ) : (
-              item.title
-            )}
+            <SongTitle title={item.title} source={item.source} />
           </h2>
           <p className="muted">
             {item.author ? `${item.author} · ` : ""}requested by {item.requestedBy.name}

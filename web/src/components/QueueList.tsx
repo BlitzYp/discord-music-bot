@@ -1,17 +1,22 @@
 import * as api from "../api";
 import { formatDuration, type QueueItem } from "../shared";
 import { useAction } from "../useAction";
+import { useDragReorder } from "../useDragReorder";
+import { SongTitle } from "./SongTitle";
 
 interface Props {
   guildId: string;
   queue: QueueItem[];
-  /** Whether the user is a DJ (shows the move/remove buttons, Shuffle and Clear). */
+  /** Whether the user is a DJ (shows the move/remove buttons, Shuffle and Clear, and allows dragging). */
   canControl: boolean;
 }
 
-/** The tracks waiting to play, numbered like /queue in Discord. */
+/** The tracks waiting to play, numbered like /queue in Discord. DJs can drag them to reorder. */
 export function QueueList({ guildId, queue, canControl }: Props) {
   const { run, pending, error } = useAction();
+  const { rowProps } = useDragReorder(queue, (item, position) => run(() => api.moveInQueue(guildId, item.id, position)), {
+    enabled: canControl && !pending,
+  });
 
   if (queue.length === 0) {
     return (
@@ -57,11 +62,11 @@ export function QueueList({ guildId, queue, canControl }: Props) {
         {queue.map((item, index) => {
           const position = index + 1; // 1 = next, like in Discord
           return (
-            <li key={item.id}>
+            <li key={item.id} {...rowProps(item, index)}>
               <span className="position">{position}</span>
-              {item.thumbnail ? <img src={item.thumbnail} alt="" /> : <span className="thumb placeholder">♪</span>}
+              {item.thumbnail ? <img src={item.thumbnail} alt="" draggable={false} /> : <span className="thumb placeholder">♪</span>}
               <span className="info">
-                <span className="title">{item.title}</span>
+                <SongTitle className="title" title={item.title} source={item.source} />
                 <span className="muted">
                   {item.author ? `${item.author} · ` : ""}
                   {item.requestedBy.name}

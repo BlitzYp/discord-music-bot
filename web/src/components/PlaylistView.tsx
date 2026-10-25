@@ -2,6 +2,8 @@ import { type FormEvent, useEffect, useState } from "react";
 import * as api from "../api";
 import { describeAddMany, formatDuration, isYoutubePlaylistLink, type PlaylistDetails, type PlaylistPlayMode } from "../shared";
 import { useAction } from "../useAction";
+import { useDragReorder } from "../useDragReorder";
+import { SongTitle } from "./SongTitle";
 
 interface Props {
   guildId: string;
@@ -21,6 +23,11 @@ export function PlaylistView({ guildId, playlistId, userId, canControl, queuedSo
   /** What the last Play / Add to queue did, e.g. "Queued 12 songs." */
   const [playResult, setPlayResult] = useState<string | null>(null);
   const { run, pending, error } = useAction();
+  const { rowProps } = useDragReorder(
+    playlist?.items ?? [],
+    (song, position) => run(() => api.moveInPlaylist(guildId, playlistId, song.id, position)),
+    { enabled: canControl && !pending },
+  );
 
   useEffect(() => {
     api
@@ -109,11 +116,11 @@ export function PlaylistView({ guildId, playlistId, userId, canControl, queuedSo
             // Members may remove the songs they added; the bot checks this again.
             const canRemove = canControl || song.addedBy.id === userId;
             return (
-              <li key={song.id}>
+              <li key={song.id} {...rowProps(song, index)}>
                 <span className="position">{position}</span>
-                {song.thumbnail ? <img src={song.thumbnail} alt="" /> : <span className="thumb placeholder">♪</span>}
+                {song.thumbnail ? <img src={song.thumbnail} alt="" draggable={false} /> : <span className="thumb placeholder">♪</span>}
                 <span className="info">
-                  <span className="title">{song.title}</span>
+                  <SongTitle className="title" title={song.title} source={song.source} />
                   <span className="muted">
                     {song.author ? `${song.author} · ` : ""}added by {song.addedBy.name}
                   </span>
