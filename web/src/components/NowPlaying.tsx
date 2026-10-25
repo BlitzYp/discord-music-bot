@@ -1,4 +1,4 @@
-import { formatDuration, type PlayerSnapshot } from "../shared";
+import { formatDuration, type PlayerSnapshot, playbackRate } from "../shared";
 import { useNow } from "../useNow";
 
 interface Props {
@@ -22,7 +22,8 @@ export function NowPlaying({ snapshot, receivedAt }: Props) {
   }
 
   // The bot sends the position about once a second; in between, count up from the last value.
-  const elapsedSinceUpdate = snapshot.paused ? 0 : now - receivedAt;
+  // Nightcore and vaporwave play the song faster or slower, so the bar has to move faster or slower too.
+  const elapsedSinceUpdate = snapshot.paused ? 0 : (now - receivedAt) * playbackRate(snapshot.filter);
   const duration = item.durationMs;
   const position = Math.min(snapshot.positionMs + elapsedSinceUpdate, duration ?? Infinity);
   const progressPercent = duration ? (position / duration) * 100 : 0;
@@ -58,7 +59,7 @@ export function NowPlaying({ snapshot, receivedAt }: Props) {
         <ul className="badges">
           <li>Volume {snapshot.volume}%</li>
           {snapshot.loopMode !== "off" && <li>Looping {snapshot.loopMode}</li>}
-          {snapshot.filter !== "off" && <li>Effect: {snapshot.filter}</li>}
+          {snapshot.filter !== "off" && <li className="effect">Effect: {snapshot.filter}</li>}
         </ul>
       </div>
     </section>

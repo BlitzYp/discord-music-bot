@@ -162,7 +162,7 @@ Possibly needed later:
 ### Slash commands
 `/play <query|url>` · `/play file:<attachment>` · `/skip` · `/stop` · `/pause` · `/resume` · `/queue` · `/nowplaying` · `/remove <pos>` · `/move <from> <to>` · `/shuffle` · `/loop off|track|queue` · `/volume <0-150>` · `/filter <effect>` · `/seek <time>` · `/library` · `/dashboard` (link to the website)
 
-`/filter` (added alongside milestone 3, at the owner's request) uses Lavalink's built-in filters: nightcore, vaporwave, bassboost, 8d, karaoke, soft, or off. One effect at a time, kept on the player until changed. The website should offer the same list (`AUDIO_FILTERS` in `src/shared/types.ts`).
+`/filter` (added alongside milestone 3, at the owner's request) uses Lavalink's built-in filters: nightcore, vaporwave, bassboost, 8d, karaoke, soft, or off. One effect at a time, kept on the player until changed. The website offers the same list (`AUDIO_FILTERS` in `src/shared/filters.ts`) through `POST /guilds/:id/player/filter { filter }`, which needs DJ permission from milestone 5.
 
 ### REST API (under `/api`, session required unless noted)
 ```
@@ -178,6 +178,7 @@ PATCH  /guilds/:id/queue/:itemId   { position: number }
 POST   /guilds/:id/player/skip | pause | resume | stop
 POST   /guilds/:id/player/seek     { positionMs }
 POST   /guilds/:id/player/volume   { volume }
+POST   /guilds/:id/player/filter   { filter }          (built early, before login)
 GET    /guilds/:id/library
 POST   /guilds/:id/library         (multipart upload)
 DELETE /guilds/:id/library/:fileId

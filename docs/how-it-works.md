@@ -89,9 +89,11 @@ Users see queue positions: the numbers in `/queue`, where 1 is the next track. `
 
 ### Audio filters
 
-`/filter` effects are built into Lavalink; the bot only picks settings. `src/player/filters.ts` maps each name to `lavalink-client` helpers (nightcore and vaporwave change speed and pitch, bassboost is an equalizer preset, 8d is rotation, and so on). `applyFilter()` first resets everything, so exactly one effect is ever active. Lavalink keeps filters on the player, so they carry over to the next songs; a new player (after the bot leaves voice) starts without effects, which is why `GuildPlayer.reset()` sets `filter` back to `off`.
+Effects (`/filter` in Discord, the Effects buttons on the website) are built into Lavalink; the bot only picks settings. `src/player/filters.ts` maps each name to `lavalink-client` helpers (nightcore and vaporwave change speed and pitch, bassboost is an equalizer preset, 8d is rotation, and so on). `applyFilter()` first resets everything, so exactly one effect is ever active. Lavalink keeps filters on the player, so they carry over to the next songs; a new player (after the bot leaves voice) starts without effects, which is why `GuildPlayer.reset()` sets `filter` back to `off`.
 
-To add an effect: add its name to `AUDIO_FILTERS` in `src/shared/types.ts`, then add a description and a `case` in `src/player/filters.ts`. The command's choices are built from that list.
+The list of effects, their descriptions and the nightcore/vaporwave speed settings live in `src/shared/filters.ts`, so Discord and the website always offer the same effects. The website uses `playbackRate()` from there to move its progress bar faster under nightcore and slower under vaporwave.
+
+To add an effect: add its name to `AUDIO_FILTERS` and a description to `FILTER_DESCRIPTIONS` in `src/shared/filters.ts`, then add a `case` in `src/player/filters.ts`. The `/filter` choices and the website's buttons are built from that list.
 
 ### `run()`: one change at a time
 
@@ -116,7 +118,11 @@ How the page stays live:
 
 The message types are defined once in `src/shared/types.ts` (`ServerToClientEvents`, `ClientToServerEvents`), and both sides import them, so the TypeScript compiler catches it if the bot and the website disagree. The website imports shared code through `web/src/shared.ts`.
 
-Until login exists (milestone 5), the server listens on `127.0.0.1` only, and the page is read-only. Changes will go through new REST routes rather than the socket, so permissions are checked in one place.
+Changes from the website go through REST routes, never the socket, so permissions will be checked in one place. The first one is `POST /api/guilds/:id/player/filter` (`src/web/routes/player.ts`, used by `web/src/components/EffectPicker.tsx`). The page doesn't apply the change itself: it waits for the socket's `player:update`, exactly as if someone had used `/filter` in Discord, so the two can't disagree.
+
+`src/web/http.ts` has `route()`, a wrapper for async route handlers: a `UserError` becomes a 400 answer with its message, anything else a 500 with the details logged to the console. Request bodies must be JSON (`express.json()`), which also stops other websites from posting to the bot through your browser.
+
+Until login exists (milestone 5), the server listens on `127.0.0.1` only. Milestone 5 must add the login and DJ-role check in front of every route in `routes/player.ts`.
 
 **To show something new on the page:** if the information is already in `PlayerSnapshot`, just use it in a component in `web/src/components/`. If not, add it to `PlayerSnapshot` in `src/shared/types.ts`, fill it in `GuildPlayer.snapshot()` (and `PlayerManager.getState()` for servers with no player yet), and the compiler will point at anything else that needs updating.
 

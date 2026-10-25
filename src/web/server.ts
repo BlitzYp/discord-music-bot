@@ -4,6 +4,7 @@ import express from "express";
 import type { PlayerManager } from "../player/PlayerManager.js";
 import { serveFrontend } from "./frontend.js";
 import { guildRoutes } from "./routes/guilds.js";
+import { playerRoutes } from "./routes/player.js";
 import { attachSocket } from "./socket.js";
 
 /** What the web layer needs from the rest of the app. */
@@ -23,7 +24,11 @@ export async function startWebServer(context: WebContext, port: number): Promise
   const app = express();
   const httpServer = createServer(app);
 
+  // Request bodies must be JSON. This also stops other websites from changing things through the user's
+  // browser: a cross-site form can't send JSON without a CORS check, and this server allows none.
+  app.use("/api", express.json());
   app.use("/api", guildRoutes(context));
+  app.use("/api", playerRoutes(context));
   app.use("/api", (_req, res) => {
     res.status(404).json({ error: "Not found" });
   });

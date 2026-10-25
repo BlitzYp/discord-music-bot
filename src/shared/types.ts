@@ -1,4 +1,9 @@
-// Types shared between the backend and (later) the React frontend.
+// Types shared between the backend and the React website.
+
+import type { AudioFilter } from "./filters.js";
+
+/** One audio effect at a time; the list of effects lives in src/shared/filters.ts. */
+export type { AudioFilter };
 
 export type TrackSource =
   | { kind: "youtube"; url: string }
@@ -30,9 +35,6 @@ export interface QueueItem {
  */
 export type LoopMode = "off" | "track" | "queue";
 
-/** Audio effects that can be applied to playback, one at a time. See src/player/filters.ts for what each does. */
-export const AUDIO_FILTERS = ["off", "nightcore", "vaporwave", "bassboost", "8d", "karaoke", "soft"] as const;
-export type AudioFilter = (typeof AUDIO_FILTERS)[number];
 
 export interface PlayerSnapshot {
   guildId: string;

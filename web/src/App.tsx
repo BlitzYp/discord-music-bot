@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchGuilds } from "./api";
+import { EffectPicker } from "./components/EffectPicker";
 import { GuildPicker } from "./components/GuildPicker";
 import { NowPlaying } from "./components/NowPlaying";
 import { QueueList } from "./components/QueueList";
@@ -64,14 +65,15 @@ export function App() {
 
       {guilds && !guildId && <GuildPicker guilds={guilds} onPick={selectGuild} />}
       {guildId && !snapshot && connected && <p className="muted">Loading…</p>}
-      {snapshot && (
+      {snapshot && guildId && (
         <main>
           <NowPlaying snapshot={snapshot} receivedAt={receivedAt} />
+          <EffectPicker guildId={guildId} active={snapshot.filter} disabled={!snapshot.voiceChannelId} />
           <QueueList queue={snapshot.queue} />
         </main>
       )}
 
-      <footer className="muted">Read-only for now. Control playback with slash commands in Discord.</footer>
+      <footer className="muted">Effects can be changed here. Everything else is controlled with slash commands in Discord for now.</footer>
     </div>
   );
 }

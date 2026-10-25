@@ -1,6 +1,5 @@
 import { SlashCommandBuilder } from "discord.js";
-import { FILTER_DESCRIPTIONS } from "../../player/filters.js";
-import { AUDIO_FILTERS, type AudioFilter } from "../../shared/types.js";
+import { AUDIO_FILTERS, type AudioFilter, FILTER_DESCRIPTIONS } from "../../shared/filters.js";
 import type { Command } from "./types.js";
 
 export const filter: Command = {

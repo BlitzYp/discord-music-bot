@@ -204,6 +204,54 @@ main {
   color: var(--muted);
 }
 
+.badges li.effect {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ---- Effects ---- */
+
+.effects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.effects button {
+  font: inherit;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.effects button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.effects button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.effects button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.hint {
+  margin: 10px 0 0;
+  font-size: 0.85rem;
+}
+
+.error-text {
+  color: #e5484d;
+}
+
 /* ---- Queue ---- */
 
 .queue {

@@ -1,20 +1,10 @@
 import type { Player } from "lavalink-client";
-import type { AudioFilter } from "../shared/types.js";
-
-/** What each filter sounds like, for command descriptions and replies. */
-export const FILTER_DESCRIPTIONS: Record<AudioFilter, string> = {
-  off: "No effects",
-  nightcore: "Faster and higher-pitched",
-  vaporwave: "Slower and lower-pitched",
-  bassboost: "Stronger bass",
-  "8d": "Sound slowly circles around your head (best with headphones)",
-  karaoke: "Tries to remove the vocals",
-  soft: "Muffled, as if from another room",
-};
+import { type AudioFilter, TIMESCALES } from "../shared/filters.js";
 
 /**
  * Replaces whatever filter is active with `filter`. Lavalink keeps filters on the player, so the effect
  * carries over to the following tracks until it's changed or the bot leaves voice.
+ * The list of effects and their descriptions live in src/shared/filters.ts.
  */
 export async function applyFilter(player: Player, filter: AudioFilter): Promise<void> {
   const filters = player.filterManager;
@@ -27,12 +17,16 @@ export async function applyFilter(player: Player, filter: AudioFilter): Promise<
   switch (filter) {
     case "off":
       break;
-    case "nightcore":
-      await filters.toggleNightcore();
+    case "nightcore": {
+      const { speed, pitch, rate } = TIMESCALES.nightcore;
+      await filters.toggleNightcore(speed, pitch, rate);
       break;
-    case "vaporwave":
-      await filters.toggleVaporwave();
+    }
+    case "vaporwave": {
+      const { speed, pitch, rate } = TIMESCALES.vaporwave;
+      await filters.toggleVaporwave(speed, pitch, rate);
       break;
+    }
     case "bassboost":
       await filters.setEQPreset("BassboostMedium");
       break;

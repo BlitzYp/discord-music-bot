@@ -88,9 +88,9 @@ npm run dev
 
 ### The website
 
-While the bot runs, open **http://localhost:3000** (or whatever `WEB_PORT` is). It shows the current song, a progress bar, and the queue, and updates live as things change in Discord. With more than one server, pick one at the top.
+While the bot runs, open **http://localhost:3000** (or whatever `WEB_PORT` is). It shows the current song, a progress bar, the active effect, and the queue, and updates live as things change in Discord. With more than one server, pick one at the top.
 
-For now it's read-only and only reachable from your own computer, because there's no login yet (milestone 5). With `npm run dev`, edits to `web/` show up in the browser immediately.
+Effects (nightcore, bassboost, …) can be switched on the page while the bot is in a voice channel; everything else is controlled from Discord for now. The website is only reachable from your own computer, because there's no login yet (milestone 5). With `npm run dev`, edits to `web/` show up in the browser immediately.
 
 Other scripts:
 
@@ -130,17 +130,18 @@ src/
     GuildPlayer.ts      One server's current track and queue
     lavalink.ts         Connection to the Lavalink server
     resolvers/          Turns a link into a track Lavalink can play (through Lavalink, or a yt-dlp download)
-    filters.ts          Audio effects for /filter
+    filters.ts          Applies the audio effects (the list itself is in src/shared/filters.ts)
     errors.ts           UserError: errors whose message is shown to users
   web/
     server.ts           Starts the website: REST API, Socket.IO and the React app on one port
-    routes/             REST API routes (under /api)
+    routes/             REST API routes (under /api): guilds.ts (read), player.ts (controls)
+    http.ts             route(): turns errors into HTTP answers
     socket.ts           Pushes PlayerManager's events to browsers
     frontend.ts         Serves the React app (Vite in development, web/dist in production)
   shared/               Types and helpers used by both the bot and the website
 web/                    The React website (Vite)
   src/App.tsx           The page: server picker, now playing, queue
-  src/components/       NowPlaying, QueueList, GuildPicker
+  src/components/       NowPlaying, EffectPicker, QueueList, GuildPicker
   src/useGuildState.ts  Live state from the bot over Socket.IO
 lavalink/
   application.yml       Lavalink settings (sources, YouTube plugin)
