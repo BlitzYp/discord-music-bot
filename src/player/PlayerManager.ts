@@ -204,13 +204,18 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
       this.players.get(lavalinkPlayer.guildId)?.onTrackStuck();
     });
 
-    // Lavalink couldn't play the track. It follows up with a "loadFailed" track end, which moves the queue on;
-    // here we only report the reason.
+    // Lavalink couldn't play the track. It follows up with a "loadFailed" track end, which either retries with
+    // yt-dlp or moves the queue on (see GuildPlayer.onTrackError). Here we only report the reason, and only
+    // when no retry is coming.
     this.lavalink.on("trackError", (lavalinkPlayer, track, payload) => {
       const guildId = lavalinkPlayer.guildId;
-      const item = this.players.get(guildId)?.current ?? null;
+      const player = this.players.get(guildId);
+      const shouldReport = player ? player.onTrackError() : true;
+      if (!shouldReport) return;
+
       const reason = "exception" in payload ? payload.exception?.message : undefined;
-      this.emit("error", guildId, item, new Error(reason ?? `Track failed: ${track?.info.title ?? "unknown"}`));
+      const error = new Error(reason ?? `Track failed: ${track?.info.title ?? "unknown"}`);
+      this.emit("error", guildId, player?.current ?? null, error);
     });
 
     // The Lavalink player is gone (/stop, the bot left an empty channel, or someone disconnected it),

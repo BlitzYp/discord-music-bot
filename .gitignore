@@ -6,3 +6,4 @@ lavalink/*.jar
 lavalink/plugins/
 lavalink/logs/
 *.log
+bin/

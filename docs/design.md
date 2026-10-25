@@ -52,18 +52,20 @@ A bot gets one voice connection per server. Lavalink owns that connection (the b
 ### Track model
 `TrackSource` and `QueueItem` live in [src/shared/types.ts](../src/shared/types.ts). The queue stores the **original input**. Display metadata (title, duration) is fetched when an item is added, but the item is resolved into a playable Lavalink track **only right before it plays**, because yt-dlp URLs and Discord CDN URLs expire.
 
-### YouTube resolution modes (global setting, milestone 3)
+### YouTube resolution modes (built in milestone 3; becomes a global setting in milestone 6)
 - `lavalink`: load the link through the `youtube-source` Lavalink plugin.
-- `ytdlp`: `yt-dlp -f "bestaudio[acodec=opus]/bestaudio" -g --no-playlist <url>` returns a direct audio URL, which is handed to Lavalink's HTTP source.
-- `auto` (default): try the plugin; if loading fails or the track errors, retry once with yt-dlp.
+- `ytdlp`: `yt-dlp -f "bestaudio[acodec=opus]/bestaudio" --no-playlist` downloads the audio to `data/ytdlp-cache/`, and Lavalink plays the file through its local source.
+- `auto` (default): try the plugin; if loading fails or the track errors, retry once with yt-dlp, from the position where playback stopped.
+- Links from other sites always use Lavalink first and yt-dlp as the backup. This is what makes SoundCloud work, since it's broken in Lavalink 4.2.2.
 
 Notes:
-- YouTube locks the URLs yt-dlp returns to the IP address that requested them. This works because yt-dlp and Lavalink run on the same machine. Always resolve and play on the same machine.
-- If Lavalink gets HTTP 403 on a yt-dlp URL, fall back to having yt-dlp download to a temp file and play it as a local file.
+- The original plan was to hand Lavalink the direct audio URL from `yt-dlp -g`. Tested 2026-10-25, YouTube answers those URLs with 403 unless the request comes from yt-dlp itself, so downloading became the method. A download takes about 10 seconds (around 5 of which is yt-dlp reading the page); the metadata lookup's JSON is reused through `--load-info-json` to skip that step when possible.
+- Downloaded files are named by a random id, cached by URL (20 most recent), and deleted on startup. Livestreams can't be downloaded, so they only work through Lavalink.
+- yt-dlp needs a JavaScript runtime for YouTube; the bot passes its own Node.js (`--js-runtimes node:<path>`).
 - Metadata: `yt-dlp -J --no-playlist <url>`, or Lavalink's `loadTracks`.
 - Playlists (milestone 8): `yt-dlp --flat-playlist -J <url>` expands a playlist into individual items.
-- Keep yt-dlp current (`yt-dlp -U`); consider updating it automatically on startup.
-- SoundCloud is broken in Lavalink 4.2.2, so the yt-dlp fallback should cover SoundCloud links too.
+- yt-dlp lives in `bin/` (`npm run setup:ytdlp`) and is updated with `yt-dlp -U` on every start.
+- Possible improvement: in `ytdlp` mode every song pauses ~10 s before starting; downloading the next queued song while the current one plays would remove the pause.
 - YouTube breaks downloaders regularly; that is why `auto` mode exists. The fix is usually updating yt-dlp and the YouTube plugin version in `lavalink/application.yml`.
 - Downloading from YouTube breaks its terms of service. That's acceptable for private use, so the bot stays private (no public bot listings).
 

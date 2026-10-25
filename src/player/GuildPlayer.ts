@@ -2,7 +2,14 @@ import type { Player, Track, TrackEndReason } from "lavalink-client";
 import type { LoopMode, PlayerSnapshot, QueueItem } from "../shared/types.js";
 import { UserError } from "./errors.js";
 import type { PlayerManager } from "./PlayerManager.js";
-import { resolvePlayable } from "./resolvers/index.js";
+import { fallbackMethod, type ResolveMethod, resolvePlayable } from "./resolvers/index.js";
+
+interface StartOptions {
+  /** Load the item only this way (used to retry with yt-dlp). By default every method is tried in order. */
+  method?: ResolveMethod;
+  /** Where to start playing, e.g. where a failed attempt stopped. */
+  startAtMs?: number;
+}
 
 /** Volume for a newly joined player, in percent. Becomes the per-server `defaultVolume` setting in milestone 6. */
 const DEFAULT_VOLUME = 100;
@@ -35,6 +42,14 @@ export class GuildPlayer {
    * "stopped" as "move on to the next track".
    */
   private advanceAfterStuckTrack = false;
+
+  /** How the current track was loaded (Lavalink or yt-dlp), so a playback failure knows what's left to try. */
+  private currentMethod: ResolveMethod | null = null;
+  /**
+   * Set when Lavalink fails to play the current track but another method can still load it. The
+   * "loadFailed" track end that follows then retries with that method, from where playback stopped (`fromMs`).
+   */
+  private pendingRetry: { method: ResolveMethod; fromMs: number } | null = null;
 
   constructor(
     readonly guildId: string,
@@ -91,26 +106,28 @@ export class GuildPlayer {
   /**
    * Adds an item to the queue. If nothing is playing, it starts right away.
    *
-   * `loadedTrack` is the track that was loaded to read the item's title. Reusing it here saves loading the
-   * link a second time when the item plays immediately. Items that wait in the queue are loaded again when
-   * their turn comes.
+   * `loadedTrack` is the track Lavalink loaded to read the item's title, if it did. Reusing it saves loading
+   * the link a second time when the item plays immediately. Items that wait in the queue are loaded again
+   * when their turn comes.
    *
    * Returns the item's position: 0 means it is playing now, 1 means it is next, and so on.
    */
-  async enqueue(item: QueueItem, loadedTrack: Track): Promise<{ position: number }> {
+  async enqueue(item: QueueItem, loadedTrack?: Track): Promise<{ position: number }> {
     if (this.current) {
       this.queue.push(item);
       this.emitQueueUpdate();
       return { position: this.queue.length };
     }
 
-    this.current = item;
-    this.emitQueueUpdate();
     try {
-      await this.playTrack(loadedTrack);
+      if (loadedTrack) {
+        this.setCurrent(item, "lavalink");
+        await this.playTrack(loadedTrack);
+      } else {
+        await this.startItem(item);
+      }
     } catch (error) {
-      this.current = null;
-      this.emitQueueUpdate();
+      this.setCurrent(null, null);
       throw error;
     }
     return { position: 0 };
@@ -222,11 +239,19 @@ export class GuildPlayer {
   async onTrackEnded(reason: TrackEndReason): Promise<void> {
     const wasStuck = this.advanceAfterStuckTrack;
     this.advanceAfterStuckTrack = false;
+    const retry = this.pendingRetry;
+    this.pendingRetry = null;
 
     const ended = this.current;
     const playedToTheEnd = reason === "finished";
     const failed = reason === "loadFailed" || (reason === "stopped" && wasStuck);
     if (!ended || (!playedToTheEnd && !failed)) return;
+
+    // Lavalink couldn't play it, but another method might (e.g. yt-dlp after YouTube blocked the plugin).
+    if (failed && retry) {
+      const retried = await this.tryToPlay(ended, { method: retry.method, startAtMs: retry.fromMs });
+      if (retried) return;
+    }
 
     this.manager.emit("track:end", this.guildId, ended, reason);
 
@@ -245,12 +270,28 @@ export class GuildPlayer {
     this.advanceAfterStuckTrack = true;
   }
 
+  /**
+   * Called when Lavalink fails to play the current track. If another method can still load it, a retry is
+   * scheduled (see `pendingRetry`) and the error isn't worth showing to users.
+   * Returns true if the error should be reported.
+   */
+  onTrackError(): boolean {
+    if (!this.current || !this.currentMethod) return true;
+    const method = fallbackMethod(this.current.source, this.currentMethod);
+    if (!method) return true;
+
+    this.pendingRetry = { method, fromMs: this.lavalinkPlayer?.position ?? 0 };
+    console.warn(`[player] ${this.currentMethod} couldn't play "${this.current.title}"; retrying with ${method}`);
+    return false;
+  }
+
   /** Forgets the current track and the queue, e.g. after the bot was disconnected from voice. */
   reset(): void {
-    this.current = null;
+    this.setCurrent(null, null);
     this.queue = [];
     this.loopMode = "off";
     this.advanceAfterStuckTrack = false;
+    this.pendingRetry = null;
     this.emitQueueUpdate();
   }
 
@@ -285,20 +326,16 @@ export class GuildPlayer {
     }
 
     // Nothing left to play.
-    this.current = null;
-    this.emitQueueUpdate();
+    this.setCurrent(null, null);
     const player = this.lavalinkPlayer;
     // If Lavalink is still playing the old track (we got here through /skip), stop it.
     if (player?.queue.current) await player.stopPlaying(/* clearQueue */ false, /* executeAutoplay */ false);
   }
 
-  /** Makes `item` the current item, loads its link and plays it. Returns false (and reports why) if that failed. */
-  private async tryToPlay(item: QueueItem): Promise<boolean> {
-    this.current = item;
-    this.emitQueueUpdate();
+  /** Like `startItem`, but reports a failure instead of throwing it. Returns whether the item started. */
+  private async tryToPlay(item: QueueItem, options: StartOptions = {}): Promise<boolean> {
     try {
-      const track = await resolvePlayable(this.manager.lavalink, item.source, item.requestedBy);
-      await this.playTrack(track);
+      await this.startItem(item, options);
       return true;
     } catch (error) {
       this.manager.emit("error", this.guildId, item, error);
@@ -306,12 +343,31 @@ export class GuildPlayer {
     }
   }
 
+  /**
+   * Makes `item` the current item, loads its link and plays it. `options.method` forces one way of loading
+   * (used for retries); otherwise the methods are tried in their normal order.
+   */
+  private async startItem(item: QueueItem, options: StartOptions = {}): Promise<void> {
+    this.setCurrent(item, null);
+    const { track, method } = await resolvePlayable(this.manager.lavalink, item.source, item.requestedBy, {
+      only: options.method,
+    });
+    this.currentMethod = method;
+    await this.playTrack(track, options.startAtMs);
+  }
+
   /** Tells Lavalink to play `track` now, replacing whatever it is playing. */
-  private async playTrack(track: Track): Promise<void> {
+  private async playTrack(track: Track, startAtMs = 0): Promise<void> {
     const player = this.lavalinkPlayer;
     if (!player) throw new UserError("Not connected to a voice channel.");
     // Lavalink stays paused across track changes; a new track should always be heard.
-    await player.play({ clientTrack: track, paused: false });
+    await player.play({ clientTrack: track, paused: false, position: startAtMs > 0 ? startAtMs : undefined });
+  }
+
+  private setCurrent(item: QueueItem | null, method: ResolveMethod | null): void {
+    this.current = item;
+    this.currentMethod = method;
+    this.emitQueueUpdate();
   }
 
   /** The Lavalink player, if something is playing. Throws "Nothing is playing" otherwise. */

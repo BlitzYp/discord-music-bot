@@ -6,8 +6,16 @@ import { registerReady } from "./bot/events/ready.js";
 import { registerVoiceStateUpdate } from "./bot/events/voiceStateUpdate.js";
 import { createLavalink } from "./player/lavalink.js";
 import { PlayerManager } from "./player/PlayerManager.js";
+import { clearDownloads, updateYtDlp } from "./player/resolvers/ytdlp.js";
 
 // Startup order: config → (db, later) → Lavalink → bot → (web, later)
+await clearDownloads();
+// YouTube changes often break old yt-dlp versions. Updating runs in the background so startup isn't delayed.
+// Becomes the owner's "yt-dlp auto-update" setting in milestone 6.
+updateYtDlp()
+  .then((result) => console.log(`[yt-dlp] ${result}`))
+  .catch((error) => console.warn(`[yt-dlp] couldn't update: ${error instanceof Error ? error.message : error}`));
+
 const client = createClient();
 const lavalink = createLavalink(client, config);
 const players = new PlayerManager(lavalink);

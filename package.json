@@ -9,7 +9,8 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "lavalink": "node scripts/lavalink.mjs",
-    "setup:lavalink": "node scripts/download-lavalink.mjs"
+    "setup:lavalink": "node scripts/download-lavalink.mjs",
+    "setup:ytdlp": "node scripts/download-ytdlp.mjs"
   },
   "dependencies": {
     "discord.js": "^14.27.0",

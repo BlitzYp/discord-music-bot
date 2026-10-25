@@ -19,8 +19,8 @@ lavalink:
       bandcamp: true
       twitch: true
       vimeo: true
-      http: true       # needed for yt-dlp URLs and direct links
-      local: true      # needed for library files
+      http: true       # needed for direct audio links
+      local: true      # needed for yt-dlp downloads and (later) library files
     bufferDurationMs: 400
     frameBufferDurationMs: 5000
     playerUpdateInterval: 1

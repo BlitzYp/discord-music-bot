@@ -2,7 +2,7 @@
 
 A self-hosted Discord bot that plays music in voice channels. Audio is played by [Lavalink](https://lavalink.dev), a separate Java server that runs next to the bot on the same machine.
 
-**Status:** milestone 2 of 8 (see the milestones in [AGENTS.md](AGENTS.md)). Slash commands only; the website comes later.
+**Status:** milestone 3 of 8 (see the milestones in [AGENTS.md](AGENTS.md)). Slash commands only; the website comes later.
 
 - [How it works](docs/how-it-works.md): a tour of the code, and how to add a command
 - [Design](docs/design.md): the full design and the decisions behind it
@@ -25,16 +25,18 @@ A self-hosted Discord bot that plays music in voice channels. Audio is played by
 
 The bot leaves the voice channel by itself, clearing the queue, after being alone in it for 60 seconds.
 
-Supported links: YouTube, Bandcamp, Twitch, Vimeo and direct audio file URLs. SoundCloud is currently broken in Lavalink 4.2.2 (see [Troubleshooting](#troubleshooting)). Searching by song name isn't supported yet.
+Supported links: YouTube, SoundCloud, Bandcamp, Twitch, Vimeo, direct audio file URLs, and most other sites [yt-dlp supports](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md). Searching by song name isn't supported yet.
+
+Links are played through Lavalink when it can. When it can't (YouTube blocks Lavalink's plugin every now and then, and SoundCloud is broken in Lavalink 4.2.2), the bot downloads the song with [yt-dlp](https://github.com/yt-dlp/yt-dlp) instead. That takes about 10 seconds, so expect a short pause on those songs.
 
 ## Setup (Windows)
 
 ### 1. Install the prerequisites
 
-You need Node.js (LTS) and Java 17 or newer. yt-dlp and ffmpeg aren't used yet, but later milestones need them.
+You need Node.js (LTS) and Java 17 or newer. ffmpeg isn't used yet; milestone 7 (uploaded files) needs it.
 
 ```
-winget install OpenJS.NodeJS.LTS EclipseAdoptium.Temurin.21.JDK yt-dlp.yt-dlp Gyan.FFmpeg
+winget install OpenJS.NodeJS.LTS EclipseAdoptium.Temurin.21.JDK Gyan.FFmpeg
 ```
 
 ### 2. Install the project
@@ -42,9 +44,11 @@ winget install OpenJS.NodeJS.LTS EclipseAdoptium.Temurin.21.JDK yt-dlp.yt-dlp Gy
 ```
 npm install
 npm run setup:lavalink
+npm run setup:ytdlp
 ```
 
-`setup:lavalink` downloads `lavalink/Lavalink.jar`. Lavalink downloads its YouTube plugin by itself the first time it starts.
+- `setup:lavalink` downloads `lavalink/Lavalink.jar`. Lavalink downloads its YouTube plugin by itself the first time it starts.
+- `setup:ytdlp` downloads yt-dlp into `bin/`. The bot updates it on every start, because YouTube changes often break old versions. (A system-wide yt-dlp also works if `bin/` has none.)
 
 ### 3. Create the Discord application
 
@@ -96,8 +100,10 @@ Other scripts:
 - **"The audio server (Lavalink) isn't connected"**: Lavalink isn't running, or `LAVALINK_PASSWORD` / `LAVALINK_PORT` don't match. Start it with `npm run lavalink` (not `java -jar` directly), because that script passes the password from `.env`. The bot keeps retrying every 5 seconds, so there's no need to restart it.
 - **New slash commands don't show up**: the Discord app caches the command list. Press **Ctrl+R** in Discord to reload it (or fully quit and reopen it). If they're still missing, check the bot's console for `registered N global commands`. Setting `DEV_GUILD_ID` makes updates instant in that one server.
 - **"YouTube refused to play this video"** (the title loads, then playback fails): YouTube regularly blocks the clients Lavalink's YouTube plugin pretends to be. The bot's console shows which clients failed and why. The usual fix is a newer plugin version in `lavalink/application.yml` (see [youtube-source releases](https://github.com/lavalink-devs/youtube-source/releases)), or changing the order of `clients` there, then restarting Lavalink. The comments in that file record what was tested last.
-- **SoundCloud links fail** with "Something went wrong while looking up the track": a bug in Lavalink 4.2.2's SoundCloud support. The yt-dlp fallback (milestone 3) is planned to cover it.
-- Lavalink's own logs are in `lavalink/logs/`.
+- **"yt-dlp isn't installed"**: run `npm run setup:ytdlp`.
+- **Some songs take ~10 seconds to start**: those are being downloaded with yt-dlp because Lavalink couldn't load them. The console shows `[resolver] lavalink couldn't load ...` or `[player] lavalink couldn't play ...` with the reason.
+- **An error starting with "yt-dlp:"**: yt-dlp couldn't get the song either; its message usually says why (private video, region-locked, removed). If YouTube songs that should work fail this way, restart the bot so it updates yt-dlp.
+- Lavalink's own logs are in `lavalink/logs/`. Downloaded songs are kept in `data/ytdlp-cache/` (the 20 most recent) and deleted when the bot starts.
 
 ## Project layout
 
@@ -114,11 +120,13 @@ src/
     PlayerManager.ts    The one entry point for playback; commands call this
     GuildPlayer.ts      One server's current track and queue
     lavalink.ts         Connection to the Lavalink server
-    resolvers/          Turns a link into a track Lavalink can play
+    resolvers/          Turns a link into a track Lavalink can play (through Lavalink, or a yt-dlp download)
     errors.ts           UserError: errors whose message is shown to users
   shared/types.ts       Types shared with the future website
 lavalink/
   application.yml       Lavalink settings (sources, YouTube plugin)
-scripts/                Helpers for downloading and starting Lavalink
+scripts/                Helpers for downloading Lavalink and yt-dlp, and starting Lavalink
+bin/                    yt-dlp (downloaded, not in git)
+data/ytdlp-cache/       Songs downloaded by yt-dlp (not in git)
 docs/                   Longer explanations
 ```

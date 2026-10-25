@@ -52,6 +52,25 @@ Lavalink tells the bot when a track ends, and why. `PlayerManager.listenToLavali
 
 `/skip` drops the current item, or, in `queue` loop mode, moves it to the end of the queue. Every new track starts unpaused, because Lavalink would otherwise stay paused across a skip.
 
+## Lavalink first, yt-dlp as the backup
+
+There are two ways to turn a link into something Lavalink can play (`src/player/resolvers/`):
+
+- **`lavalink`**: Lavalink loads the link itself (`resolvers/lavalink.ts`). Fast, and the normal path.
+- **`ytdlp`**: yt-dlp downloads the audio into `data/ytdlp-cache/`, and Lavalink plays the file from disk (`resolvers/ytdlp.ts`). Slower (about 10 seconds per song), but yt-dlp keeps up with YouTube's changes faster than Lavalink's plugin, and it supports SoundCloud, which Lavalink 4.2.2 can't play.
+
+`methodsFor(source)` in `resolvers/index.ts` decides which methods to try, in order. For YouTube that depends on `YOUTUBE_MODE` (`auto` = Lavalink then yt-dlp); every other site gets Lavalink then yt-dlp. `resolvePlayable()` tries them until one works.
+
+Why download instead of handing Lavalink yt-dlp's audio URL (`yt-dlp -g`)? Tested 2026-10-25: YouTube answers those URLs with 403 Forbidden unless the request comes from yt-dlp itself.
+
+A link can also *load* fine through Lavalink and then fail while *playing* (YouTube blocking the plugin did exactly this). Then:
+
+1. Lavalink reports a track error. `GuildPlayer.onTrackError()` sees that the track came from `lavalink` and that `ytdlp` is still left to try, so it records a `pendingRetry` (including how far playback got) and tells `PlayerManager` not to show the error.
+2. Lavalink then ends the track with reason `loadFailed`. `onTrackEnded()` finds the pending retry and plays the same item again with yt-dlp, from the same position.
+3. If yt-dlp fails too, that error *is* shown, and the queue moves on.
+
+Downloads are shared and cached by URL (the last 20 songs), so looping a song doesn't download it again. The cache is emptied on every start, and the bot runs `yt-dlp -U` at startup to stay current.
+
 ### Why load the link again right before playing?
 
 The queue stores what the user typed (the link), not a ready-to-play track. Some playable URLs expire: Discord attachment links after about a day, and the direct audio URLs yt-dlp produces after a few hours. Loading at play time means a song that waited in the queue for a long time still works. This becomes important in milestones 3 (yt-dlp) and 7 (uploaded files).
