@@ -294,6 +294,17 @@ While interrupted, `/skip` moves to the next song without playing it (it waits t
 
 Saved items are links, loaded again when they play like any queued item, so links that expired during the downtime don't matter.
 
+## The bot's status
+
+`src/bot/presence.ts` keeps the bot's Discord status in step with playback. It listens to `PlayerManager`'s `queue:update` and `player:update` events, the client's ready event, and `SettingsStore`'s `global:change`. `currentStatus()` picks what to show: the owner's `statusOverride` (a global setting, set on the Admin page) if there is one, otherwise the automatic status, which reads every server's `players.getState()` and sums them up in `describe()`: playing ("Listening to *title – artist*", or "music in N servers"), then paused, then stopped by a restart ("Waiting for /resume"), then in voice with nothing queued, then idle. A bot has only one status for all its servers, which is why it's a summary.
+
+Two details:
+- `player:update` fires about once a second while a song plays, so updates are gathered: at most one every 5 seconds (`MIN_UPDATE_INTERVAL_MS`), and only when the text actually changed.
+- "Listening to …" is a Listening activity (likewise Playing, Watching, Competing for a custom status). The other texts are a Custom status, which shows its `state` on its own; Discord still wants a `name`, but doesn't display it.
+- Settings are normally just read when needed, but nothing would read the status setting until the next song changed. So `SettingsStore.updateGlobal()` emits `global:change`, and a new custom status (or going back to automatic) shows within a few seconds.
+
+The Admin page's Status card shows `currentStatus()` too, so the owner sees what Discord shows. To change what the automatic status says, edit `describe()`; it's a plain function from snapshots to text, so it's easy to try out with made-up snapshots.
+
 ## Errors
 
 - Throw **`UserError`** (from `src/player/errors.ts`) when the message is meant for the user, e.g. `throw new UserError("Join a voice channel first.")`. The command handler shows that message as the reply.

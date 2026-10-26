@@ -2,9 +2,15 @@ import { type FormEvent, useEffect, useState } from "react";
 import * as api from "../api";
 import {
   type AdminStatus,
+  BOT_STATUS_DOTS,
+  BOT_STATUS_TYPES,
+  type BotStatus,
+  type BotStatusDot,
+  type BotStatusType,
   formatDuration,
   GLOBAL_SETTING_LIMITS,
   type GlobalSettings,
+  MAX_BOT_STATUS_LENGTH,
   YOUTUBE_MODES,
   type YoutubeMode,
 } from "../shared";
@@ -16,6 +22,26 @@ const YOUTUBE_MODE_LABELS: Record<YoutubeMode, string> = {
   lavalink: "Only Lavalink's YouTube plugin",
   ytdlp: "Only yt-dlp (every song takes ~10 seconds to start)",
 };
+
+/** How Discord writes each kind of status, "{text}" standing for the status text. */
+const STATUS_TYPE_LABELS: Record<BotStatusType, string> = {
+  custom: "{text}",
+  listening: "Listening to {text}",
+  playing: "Playing {text}",
+  watching: "Watching {text}",
+  competing: "Competing in {text}",
+};
+
+const STATUS_DOT_LABELS: Record<BotStatusDot, string> = {
+  online: "Online (green)",
+  idle: "Idle (moon)",
+  dnd: "Do not disturb (red)",
+};
+
+/** A fixed status as Discord shows it, e.g. "Listening to the radio". */
+function describeStatus({ type, text }: Pick<BotStatus, "type" | "text">): string {
+  return STATUS_TYPE_LABELS[type].replace("{text}", text);
+}
 
 /** How often the status refreshes while the page is open. */
 const STATUS_REFRESH_MS = 10_000;
@@ -104,6 +130,8 @@ function GlobalSettingsForm() {
         />
       </Field>
 
+      <StatusOverrideField value={draft.statusOverride} onChange={(statusOverride) => setDraft({ ...draft, statusOverride })} />
+
       <div className="save-row">
         <button type="submit" className="primary" disabled={pending || !hasChanges}>
           {pending ? "Saving…" : "Save"}
@@ -111,6 +139,65 @@ function GlobalSettingsForm() {
         {error && <span className="error-text">{error}</span>}
       </div>
     </form>
+  );
+}
+
+interface StatusOverrideFieldProps {
+  /** null = automatic. */
+  value: BotStatus | null;
+  onChange: (value: BotStatus | null) => void;
+}
+
+/** The bot's Discord status: automatic (what it's playing), or a fixed one the owner types. */
+function StatusOverrideField({ value, onChange }: StatusOverrideFieldProps) {
+  return (
+    <Field
+      label="Discord status"
+      hint="Automatic shows what the bot is doing: “Listening to <song>”, “⏸ Paused”, “Idle · /play to start”. A custom status stays until you switch back to automatic."
+    >
+      <div className="status-override">
+        <select
+          aria-label="Status mode"
+          value={value ? "custom" : "automatic"}
+          onChange={(event) => onChange(event.target.value === "custom" ? { type: "custom", text: "", dot: "online" } : null)}
+        >
+          <option value="automatic">Automatic: what the bot is doing</option>
+          <option value="custom">Custom</option>
+        </select>
+
+        {value && (
+          <>
+            <select
+              aria-label="Kind of status"
+              value={value.type}
+              onChange={(event) => onChange({ ...value, type: event.target.value as BotStatusType })}
+            >
+              {BOT_STATUS_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {type === "custom" ? "Just the text" : describeStatus({ type, text: "…" })}
+                </option>
+              ))}
+            </select>
+            <input
+              type="text"
+              aria-label="Status text"
+              placeholder="Status text"
+              maxLength={MAX_BOT_STATUS_LENGTH}
+              value={value.text}
+              onChange={(event) => onChange({ ...value, text: event.target.value })}
+            />
+            <select aria-label="Dot" value={value.dot} onChange={(event) => onChange({ ...value, dot: event.target.value as BotStatusDot })}>
+              {BOT_STATUS_DOTS.map((dot) => (
+                <option key={dot} value={dot}>
+                  {STATUS_DOT_LABELS[dot]}
+                </option>
+              ))}
+            </select>
+            {value.text.trim() && <p className="muted hint">Shows as: {describeStatus(value)}</p>}
+          </>
+        )}
+      </div>
+    </Field>
   );
 }
 
@@ -176,6 +263,12 @@ function StatusCard() {
             </button>
             {updateMessage && <span className="muted"> {updateMessage}</span>}
             {update.error && <span className="error-text"> {update.error}</span>}
+          </dd>
+
+          <dt>Discord status</dt>
+          <dd>
+            {describeStatus(status.discordStatus)} · {STATUS_DOT_LABELS[status.discordStatus.dot].toLowerCase()} ·{" "}
+            <span className="muted">{status.discordStatus.overridden ? "custom (set above)" : "automatic"}</span>
           </dd>
 
           <dt>ffmpeg</dt>

@@ -1,9 +1,17 @@
 import { Router } from "express";
 import type { LavalinkManager } from "lavalink-client";
 import { z } from "zod";
+import { currentStatus } from "../../bot/presence.js";
 import { ffmpegVersion } from "../../library/ffmpeg.js";
 import { updateYtDlp, ytDlpVersion } from "../../player/resolvers/ytdlp.js";
-import { type AdminStatus, GLOBAL_SETTING_LIMITS, YOUTUBE_MODES } from "../../shared/settings.js";
+import {
+  type AdminStatus,
+  BOT_STATUS_DOTS,
+  BOT_STATUS_TYPES,
+  GLOBAL_SETTING_LIMITS,
+  MAX_BOT_STATUS_LENGTH,
+  YOUTUBE_MODES,
+} from "../../shared/settings.js";
 import { requireOwner } from "../access.js";
 import { parseBody, route } from "../http.js";
 import type { WebContext } from "../server.js";
@@ -17,6 +25,15 @@ const globalSettingsChanges = z
     ytdlpAutoUpdate: z.boolean(),
     maxUploadMb: whole(GLOBAL_SETTING_LIMITS.maxUploadMb),
     guildQuotaMb: whole(GLOBAL_SETTING_LIMITS.guildQuotaMb),
+    // null goes back to the automatic status.
+    statusOverride: z
+      .object({
+        type: z.enum(BOT_STATUS_TYPES),
+        text: z.string().trim().min(1, "type the status text").max(MAX_BOT_STATUS_LENGTH),
+        dot: z.enum(BOT_STATUS_DOTS),
+      })
+      .strict()
+      .nullable(),
   })
   .partial()
   .strict();
@@ -57,6 +74,7 @@ export function adminRoutes({ client, players, settings }: WebContext): Router {
         lavalink: lavalinkStatus(players.lavalink),
         ytdlp: { version: await ytDlpVersion().catch(() => null) },
         ffmpeg: { version: await ffmpegVersion().catch(() => null) },
+        discordStatus: currentStatus(client, players, settings),
       };
       res.json(status);
     }),

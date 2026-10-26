@@ -1049,6 +1049,17 @@ code {
   font-weight: 400;
 }
 
+/* The Admin page's Discord status setting: mode, kind, text and dot, stacked. */
+.status-override {
+  display: grid;
+  gap: 8px;
+  max-width: 420px;
+}
+
+.status-override .hint {
+  margin: 0;
+}
+
 /* The Library tab: upload button and progress, search, and the file list (which reuses the queue's rows). */
 .upload {
   display: grid;

@@ -13,6 +13,27 @@ import { MAX_VOLUME } from "./player.js";
 export const YOUTUBE_MODES = ["auto", "lavalink", "ytdlp"] as const;
 export type YoutubeMode = (typeof YOUTUBE_MODES)[number];
 
+/**
+ * The kinds of Discord status the bot can show. Discord writes them as "Listening to <text>", "Playing <text>",
+ * "Watching <text>" and "Competing in <text>"; a "custom" status shows the text on its own.
+ */
+export const BOT_STATUS_TYPES = ["custom", "listening", "playing", "watching", "competing"] as const;
+export type BotStatusType = (typeof BOT_STATUS_TYPES)[number];
+
+/** The dot on the bot's avatar: green (online), the moon (idle) or red (do not disturb). */
+export const BOT_STATUS_DOTS = ["online", "idle", "dnd"] as const;
+export type BotStatusDot = (typeof BOT_STATUS_DOTS)[number];
+
+/** Discord cuts status text after 128 characters. */
+export const MAX_BOT_STATUS_LENGTH = 128;
+
+/** What the bot's Discord status shows. */
+export interface BotStatus {
+  type: BotStatusType;
+  text: string;
+  dot: BotStatusDot;
+}
+
 /** Settings for the whole bot. Only the bot owner (OWNER_ID) can change them, on the website's Admin page. */
 export interface GlobalSettings {
   youtubeMode: YoutubeMode;
@@ -22,6 +43,11 @@ export interface GlobalSettings {
   maxUploadMb: number;
   /** How much space each server's library may use, in megabytes. */
   guildQuotaMb: number;
+  /**
+   * A fixed Discord status for the bot, shown instead of the automatic one ("Listening to <song>", "Idle · /play
+   * to start"; see src/bot/presence.ts). null = automatic.
+   */
+  statusOverride: BotStatus | null;
 }
 
 export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
@@ -29,6 +55,7 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   ytdlpAutoUpdate: true,
   maxUploadMb: 100,
   guildQuotaMb: 2000,
+  statusOverride: null,
 };
 
 /** The allowed range of each global number setting. The Admin page uses them for its inputs; the server checks them. */
@@ -108,4 +135,6 @@ export interface AdminStatus {
   ytdlp: { version: string | null };
   /** ffmpeg checks and converts library uploads. null = not found. */
   ffmpeg: { version: string | null };
+  /** The bot's Discord status right now, and whether it's the owner's fixed one (statusOverride) or the automatic one. */
+  discordStatus: BotStatus & { overridden: boolean };
 }

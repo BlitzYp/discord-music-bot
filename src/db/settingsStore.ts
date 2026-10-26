@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import type { UploadPermission } from "../shared/library.js";
 import {
   DEFAULT_GLOBAL_SETTINGS,
@@ -24,9 +25,14 @@ interface GuildSettingsRow {
  * on the website applies to the very next command.
  *
  * Values are checked before they get here (src/web/routes/settings.ts); this class only stores them.
+ *
+ * Most settings are simply read when they're needed. The few that must apply at once, without waiting for
+ * something to read them (the bot's Discord status), listen to "global:change".
  */
-export class SettingsStore {
-  constructor(private readonly db: Db) {}
+export class SettingsStore extends EventEmitter<{ "global:change": [settings: GlobalSettings] }> {
+  constructor(private readonly db: Db) {
+    super();
+  }
 
   // ---- Global (the bot owner's) ----
 
@@ -50,7 +56,9 @@ export class SettingsStore {
         if (value !== undefined) upsert.run(key, JSON.stringify(value));
       }
     })();
-    return this.global();
+    const settings = this.global();
+    this.emit("global:change", settings);
+    return settings;
   }
 
   // ---- Per server ----

@@ -110,6 +110,7 @@ The types, defaults and allowed ranges live in [src/shared/settings.ts](../src/s
 - `ytdlpAutoUpdate`: on/off, plus an "Update now" button
 - Status view: bot uptime and servers; Lavalink connection, version, YouTube plugin version, players and memory; yt-dlp version
 - `maxUploadMb` and `guildQuotaMb` (milestone 8): the largest upload, and each server's library space. The status view also shows ffmpeg's version.
+- `statusOverride` (after milestone 9): `null` = the automatic Discord status, or `{ type: custom|listening|playing|watching|competing, text (≤128), dot: online|idle|dnd }`. The status view shows the current Discord status and whether it's custom.
 
 **Per server (server admins, Settings tab):**
 - `djRoleId` (unset = only admins can control playback; @everyone = every member)
@@ -225,6 +226,9 @@ POST   /guilds/:id/playlists/from-queue               (dj) { name }
 ### Website layout
 
 The Player tab puts the current song in a full-width section at the top: artwork and title, then progress and playback controls. Audio effects expand below the controls, with the active effect shown in the summary. Adding a song belongs with the queue: the form sits under **Up next**, outside a height-limited, keyboard-scrollable song list. **Recently played** sits beside the queue on wide screens and follows it on smaller screens, with a **+** action to queue a song again. Neutral surfaces, text-style secondary actions, list dividers and underlined navigation follow the system's light/dark theme. Artwork has a consistent fallback when an image is unavailable. On phones, row actions wrap below song details; move buttons remain available where dragging is unsupported. This layout uses the existing API and permission checks.
+
+### Bot status
+The bot's Discord status says what it's doing, summed up over all servers (a bot has one status): "Listening to *title – artist*" (or "music in N servers"), "⏸ Paused: *title*", "Waiting for /resume: *title*" after a restart, "Waiting for a song · /play" in voice with an empty queue, or "Idle · /play to start" (with the idle moon). At most one update every 5 seconds. The owner can replace it with a fixed status on the Admin page (`statusOverride`); clearing that brings the automatic one back. Added at the owner's request after milestone 9 (`src/bot/presence.ts`).
 
 ### Slash commands
 `/play <song name|url> [playlist]` · `/play file:<attachment>` · `/playlist …` (see "Playlists") · `/skip` · `/stop` · `/pause` · `/resume` · `/queue` · `/nowplaying` · `/remove <pos>` · `/move <from> <to>` · `/shuffle` · `/loop off|track|queue` · `/volume <0-150>` · `/filter <effect>` · `/seek <time>` · `/library list|play|upload|delete` · `/dashboard` (link to the website)

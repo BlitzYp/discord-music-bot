@@ -4,6 +4,7 @@ import { registerInteractionCreate } from "./bot/events/interactionCreate.js";
 import { registerPlayerEvents } from "./bot/events/playerEvents.js";
 import { registerReady } from "./bot/events/ready.js";
 import { registerVoiceStateUpdate } from "./bot/events/voiceStateUpdate.js";
+import { registerPresence } from "./bot/presence.js";
 import { openDatabase } from "./db/database.js";
 import { LibraryStore } from "./db/libraryStore.js";
 import { PlayerStateStore } from "./db/playerStateStore.js";
@@ -44,6 +45,7 @@ registerReady(client, lavalink, players, config);
 registerInteractionCreate(client, { players, playlists, library, settings });
 registerPlayerEvents(client, players, settings);
 registerVoiceStateUpdate(client, players);
+registerPresence(client, players, settings);
 
 process.on("unhandledRejection", (error) => console.error("[process] unhandled rejection:", error));
 

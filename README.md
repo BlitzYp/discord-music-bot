@@ -8,6 +8,29 @@ A self-hosted Discord bot that plays music in voice channels. Audio is played by
 - [Design](docs/design.md): the full design and the decisions behind it
 - [AGENTS.md](AGENTS.md): instructions for AI coding agents (Claude Code reads it through `CLAUDE.md`)
 
+## Meet Brick Maback
+
+<img src="docs/images/brick-maback-profile.png" alt="Brick Maback's Discord profile: his avatar, the APP badge, the tag Brick Maback#7112 and the bio “Bot that plays music.”" width="420">
+
+In Discord, the bot is **Brick Maback** (`Brick Maback#7112`), with the bio "Bot that plays music." He joins your voice channel when someone plays something, and leaves by himself once nobody is left listening.
+
+His status shows what he's doing right now:
+
+| Status | Dot | Means |
+|---|---|---|
+| Listening to *Song – Artist* | green | Playing that song |
+| Listening to *music in 2 servers* | green | Playing in more than one server at once |
+| ⏸ Paused: *Song* | green | Paused; `/resume` continues |
+| Waiting for a song · /play | green | In a voice channel with an empty queue |
+| Waiting for /resume: *Song* | moon | The bot restarted mid-song; `/resume` (or `/play`) picks it up again |
+| Idle · /play to start | moon | Not in any voice channel |
+
+Discord gives a bot one status for all its servers, so with several servers it sums them up (playing beats paused, paused beats waiting). The status changes at most every 5 seconds.
+
+To show something else, the bot owner can set a **custom status** on the website's Admin page: any text, shown as it is or as "Listening to …", "Playing …", "Watching …" or "Competing in …", with a green, moon or red dot. It stays until it's switched back to **Automatic**, which brings back the table above.
+
+His name, avatar and bio are set in the [Discord Developer Portal](https://discord.com/developers/applications): the name and avatar under **Bot**, the bio ("description") under **General Information**. To add him to another server, open the invite link from step 3 of the setup below.
+
 ## Commands
 
 | Command | What it does |
@@ -155,7 +178,7 @@ The **Player** tab starts with the current song, artwork, progress and playback 
   | Announce songs in | A text channel where the bot posts "Now playing …" for every new song (default: off). |
   | Who can upload to the library | DJs (and admins), only admins, or nobody (default: DJs). |
 
-- **You (the bot owner)** also get an **Admin** button at the top: how YouTube links are loaded (automatic, only Lavalink's plugin, or only yt-dlp), whether yt-dlp updates on every start, an "Update now" button for yt-dlp, the largest library upload and the library space per server, and the status of the bot, Lavalink, yt-dlp and ffmpeg.
+- **You (the bot owner)** also get an **Admin** button at the top: how YouTube links are loaded (automatic, only Lavalink's plugin, or only yt-dlp), whether yt-dlp updates on every start, an "Update now" button for yt-dlp, the largest library upload and the library space per server, Brick Maback's Discord status (automatic, or a custom one), and the status of the bot, Lavalink, yt-dlp and ffmpeg, plus the Discord status he shows right now.
 
 Settings apply right away; there's nothing to restart.
 
@@ -254,6 +277,7 @@ src/
     commands/           One file per slash command
     events/             Discord event handlers (ready + rejoining after a restart, slash commands, playback messages)
     voice.ts            Counts the people in a voice channel
+    presence.ts         Brick Maback's status ("Listening to …", "Idle · /play to start")
     format.ts           Formatting helpers for Discord messages
   player/
     PlayerManager.ts    The one entry point for playback; commands call this
