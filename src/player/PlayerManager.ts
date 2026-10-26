@@ -10,7 +10,7 @@ import { type AddManyResult, MAX_PLAYLIST_SONGS, type PlaylistPlayMode } from ".
 import type { AudioFilter, LoopMode, PlayerSnapshot, QueueItem, Requester } from "../shared/types.js";
 import { UserError } from "./errors.js";
 import { GuildPlayer } from "./GuildPlayer.js";
-import { findSong, listPlaylist, parseInput, type TrackMetadata } from "./resolvers/index.js";
+import { findSong, listPlaylist, type TrackMetadata } from "./resolvers/index.js";
 
 /**
  * Events PlayerManager emits whenever something changes. The bot posts "error" in Discord;
@@ -111,19 +111,23 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
   }
 
   /**
-   * Adds every song of a playlist link (a YouTube playlist, or a video opened from one) to the end of the queue,
-   * joining the requester's voice channel first if needed. Returns the playlist's title and what was added.
+   * Adds every song of a playlist link (a YouTube playlist or a video opened from one, or a Spotify album or
+   * playlist) to the end of the queue, joining the requester's voice channel first if needed. Returns the
+   * playlist's title, what was added, and notes such as songs that weren't found on YouTube.
    */
-  async playPlaylistLink(guildId: string, request: PlayRequest): Promise<{ title: string; result: AddManyResult }> {
-    const url = parseInput(request.input).url;
+  async playPlaylistLink(
+    guildId: string,
+    request: PlayRequest,
+  ): Promise<{ title: string; result: AddManyResult; notes: string[] }> {
     const player = this.getOrCreatePlayer(guildId);
     // Join voice before reading the playlist, so "join a voice channel first" comes back immediately.
     await player.run(() => player.ensureConnected(request.voiceChannelId, request.textChannelId));
 
-    const { title, entries } = await listPlaylist(url, MAX_PLAYLIST_SONGS);
+    const search = { lavalink: this.lavalink, requester: request.requestedBy, youtubeMode: this.settings.global().youtubeMode };
+    const { title, entries, notes } = await listPlaylist(request.input, MAX_PLAYLIST_SONGS, search);
     const items = entries.map(({ source, meta }) => ({ id: randomUUID(), source, ...meta, requestedBy: request.requestedBy }));
     const result = await this.addMany(guildId, items, request, "append");
-    return { title, result };
+    return { title, result, notes };
   }
 
   /**

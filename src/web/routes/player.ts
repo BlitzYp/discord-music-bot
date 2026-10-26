@@ -3,6 +3,7 @@ import { UserError } from "../../player/errors.js";
 import { MAX_VOLUME } from "../../player/GuildPlayer.js";
 import { AUDIO_FILTERS, type AudioFilter } from "../../shared/filters.js";
 import { isYoutubePlaylistLink } from "../../shared/playlists.js";
+import { isSpotifyCollectionLink } from "../../shared/spotify.js";
 import type { LoopMode } from "../../shared/types.js";
 import { type GuildAccess, requireGuildAccess } from "../access.js";
 import { route } from "../http.js";
@@ -36,6 +37,7 @@ export function playerRoutes({ client, players, library, settings }: WebContext)
   // ---- The queue ----
 
   // { input } adds one link, or the best YouTube match for a search. With `wholePlaylist: true`, a YouTube playlist link queues every song of the playlist.
+  // A Spotify album or playlist link always queues all of its songs.
   // { fileId } adds a file from the server's library.
   djRoute("post", "/guilds/:id/queue", async ({ guild, user }, req) => {
     const voice = {
@@ -53,7 +55,9 @@ export function playerRoutes({ client, players, library, settings }: WebContext)
     const input = req.body?.input;
     if (typeof input !== "string" || input.trim() === "") throw new UserError("Type a song to search for, or paste a link.");
     const request = { input, ...voice };
-    if (req.body?.wholePlaylist === true) {
+    if (isSpotifyCollectionLink(input)) {
+      await players.playPlaylistLink(guild.id, request);
+    } else if (req.body?.wholePlaylist === true) {
       if (!isYoutubePlaylistLink(input)) throw new UserError(`That isn't a YouTube playlist link (one with "list=" in it).`);
       await players.playPlaylistLink(guild.id, request);
     } else {

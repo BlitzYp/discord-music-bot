@@ -1,8 +1,11 @@
 import type { LavalinkManager, Track } from "lavalink-client";
+import { isYoutubePlaylistLink } from "../../shared/playlists.js";
 import type { YoutubeMode } from "../../shared/settings.js";
+import { isSpotifyShortLink, parseSpotifyLink, type SpotifyLink } from "../../shared/spotify.js";
 import type { QueueItem, Requester, TrackSource } from "../../shared/types.js";
 import { UserError } from "../errors.js";
 import { loadFileWithLavalink, loadUrlWithLavalink, searchWithLavalink } from "./lavalink.js";
+import { readSpotifyCollection, readSpotifyTrack, SPOTIFY_EMBED_SONG_LIMIT, searchQueryFor } from "./spotify.js";
 import { downloadAudio, fetchInfo, fetchPlaylist, searchYoutubeWithYtDlp, type YtDlpPlaylistEntry } from "./ytdlp.js";
 
 const YOUTUBE_HOSTS = new Set(["youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be"]);
@@ -37,9 +40,9 @@ export interface FoundSong {
 }
 
 /**
- * Finds the song someone asked for in /play, "Add a song" or a playlist: a link is loaded as it is; anything else
- * is searched for on YouTube. Either way the result is a link, which is what the queue stores: searching again
- * when the song plays could find a different video.
+ * Finds the song someone asked for in /play, "Add a song" or a playlist: a link is loaded as it is; a Spotify
+ * track link and anything else is searched for on YouTube. Either way the result is a link, which is what the
+ * queue stores: searching again when the song plays could find a different video.
  */
 export async function findSong(
   lavalink: LavalinkManager,
@@ -47,11 +50,31 @@ export async function findSong(
   requester: Requester,
   youtubeMode: YoutubeMode,
 ): Promise<FoundSong> {
+  if (isSpotifyShortLink(input)) throw spotifyShortLinkError();
+  const spotifyLink = parseSpotifyLink(input);
+  if (spotifyLink) return findSpotifySong(lavalink, spotifyLink, requester, youtubeMode);
   if (isLink(input)) {
     const source = parseInput(input);
     return { source, ...(await fetchMetadata(lavalink, source, requester, youtubeMode)) };
   }
   return searchYoutube(lavalink, input, requester, youtubeMode);
+}
+
+/**
+ * Spotify doesn't let anyone stream its songs, so a Spotify track is played from YouTube: its artists and title
+ * are searched for, the same as typing them.
+ */
+async function findSpotifySong(
+  lavalink: LavalinkManager,
+  link: SpotifyLink,
+  requester: Requester,
+  youtubeMode: YoutubeMode,
+): Promise<FoundSong> {
+  if (link.type !== "track") {
+    throw new UserError(`That's a Spotify ${link.type}. DJs can add all of its songs to a playlist with /playlist import, or on the website.`);
+  }
+  const song = await readSpotifyTrack(link);
+  return searchYoutube(lavalink, searchQueryFor(song), requester, youtubeMode);
 }
 
 /** Whether the input is an http(s) link (otherwise it's searched for). */
@@ -214,14 +237,46 @@ export interface PlaylistEntry {
   meta: TrackMetadata;
 }
 
+/** The songs read from a playlist link, plus anything worth telling the person who added them. */
+export interface ListedPlaylist {
+  title: string;
+  entries: PlaylistEntry[];
+  /** Sentences like "2 songs weren't found on YouTube." Shown under the reply in Discord. */
+  notes: string[];
+}
+
+/** What searching YouTube needs, for playlists whose songs are searched for (Spotify). */
+export interface SearchContext {
+  lavalink: LavalinkManager;
+  /** Lavalink attaches this to the tracks it finds. Only the found links are kept, so it's informational. */
+  requester: Requester;
+  youtubeMode: YoutubeMode;
+}
+
 /** YouTube shows these instead of a title for videos in a playlist that nobody can watch any more. */
 const UNAVAILABLE_TITLES = new Set(["[Private video]", "[Deleted video]"]);
 
 /**
- * Reads the songs of a playlist link (a YouTube playlist, or a video opened from one), at most `limit` of them.
- * Uses yt-dlp, which lists them without downloading anything. Private and deleted videos are left out.
+ * Reads the songs of a playlist link, at most `limit` of them: a YouTube playlist (or a video opened from one),
+ * or a Spotify album or playlist.
  */
-export async function listPlaylist(url: string, limit: number): Promise<{ title: string; entries: PlaylistEntry[] }> {
+export async function listPlaylist(input: string, limit: number, search: SearchContext): Promise<ListedPlaylist> {
+  if (isSpotifyShortLink(input)) throw spotifyShortLinkError();
+  const spotifyLink = parseSpotifyLink(input);
+  if (spotifyLink && spotifyLink.type !== "track") return listSpotifyCollection(spotifyLink, limit, search);
+
+  const { url } = parseInput(input);
+  if (!isYoutubePlaylistLink(url)) {
+    throw new UserError(`That isn't a playlist link: use a YouTube playlist (with "list=" in it), or a Spotify album or playlist.`);
+  }
+  return listYoutubePlaylist(url, limit);
+}
+
+/**
+ * Reads a YouTube playlist with yt-dlp, which lists the videos without downloading anything. Private and
+ * deleted videos are left out.
+ */
+async function listYoutubePlaylist(url: string, limit: number): Promise<ListedPlaylist> {
   const playlist = await fetchPlaylist(url, limit).catch((error: unknown) => {
     throw explainPlaylistError(url, error);
   });
@@ -235,7 +290,67 @@ export async function listPlaylist(url: string, limit: number): Promise<{ title:
   const isMix = new URL(url).searchParams.get("list")?.startsWith("RD") ?? false;
   if (isMix && entries.length <= 1) throw personalMixError();
   if (entries.length === 0) throw new UserError("No playable songs were found in that playlist.");
-  return { title: playlist.title || "Imported playlist", entries };
+  return { title: playlist.title || "Imported playlist", entries, notes: [] };
+}
+
+/** How many Spotify songs are searched for on YouTube at the same time. More is faster, but YouTube may refuse. */
+const SPOTIFY_SEARCHES_AT_ONCE = 4;
+
+/**
+ * Reads a Spotify album or playlist and finds each of its songs on YouTube, like a text search. The links that
+ * were found are what gets queued or saved, so a song can't change between adding and playing it. Songs YouTube
+ * has no match for are left out and counted in the notes.
+ */
+async function listSpotifyCollection(link: SpotifyLink, limit: number, search: SearchContext): Promise<ListedPlaylist> {
+  const { title, songs } = await readSpotifyCollection(link);
+  if (songs.length === 0) throw new UserError(`That Spotify ${link.type} has no songs.`);
+
+  const wanted = songs.slice(0, limit);
+  let lastError: unknown;
+  const found = await mapWithLimit(wanted, SPOTIFY_SEARCHES_AT_ONCE, async (song) => {
+    try {
+      const { source, meta } = await searchYoutube(search.lavalink, searchQueryFor(song), search.requester, search.youtubeMode);
+      return { source, meta };
+    } catch (error) {
+      lastError = error;
+      const reason = error instanceof Error ? error.message.split("\n")[0] : String(error);
+      console.warn(`[spotify] left out "${searchQueryFor(song)}": ${reason}`);
+      return null;
+    }
+  });
+  const entries = found.filter((entry): entry is PlaylistEntry => entry !== null);
+
+  if (entries.length === 0) {
+    // Every search failing for the same non-user reason (Lavalink down, YouTube blocking) is worth showing as is.
+    if (lastError instanceof UserError) throw new UserError(`None of the songs of that Spotify ${link.type} were found on YouTube.`);
+    throw lastError;
+  }
+
+  const notes: string[] = [];
+  const missing = wanted.length - entries.length;
+  if (missing > 0) notes.push(`${missing} ${missing === 1 ? "song wasn't" : "songs weren't"} found on YouTube.`);
+  // The embed page doesn't say how many songs there are in total, so exactly 100 may or may not be all of them.
+  if (songs.length >= SPOTIFY_EMBED_SONG_LIMIT) {
+    notes.push(`Spotify only shows the bot the first ${SPOTIFY_EMBED_SONG_LIMIT} songs of a ${link.type}; if it has more, the rest are missing.`);
+  }
+  return { title, entries, notes };
+}
+
+/** Runs `work` on every item, at most `limit` at a time, and returns the results in the items' order. */
+async function mapWithLimit<T, R>(items: T[], limit: number, work: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let nextIndex = 0;
+  // Each worker takes the next item until none are left. JavaScript runs one at a time between awaits, so two
+  // workers can't take the same index.
+  async function worker(): Promise<void> {
+    while (nextIndex < items.length) {
+      const index = nextIndex++;
+      results[index] = await work(items[index]!);
+    }
+  }
+  const workerCount = Math.min(limit, items.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return results;
 }
 
 /**
@@ -261,6 +376,13 @@ function songFromEntry(entry: YtDlpPlaylistEntry): PlaylistEntry | null {
     },
   };
 }
+
+/** A new error each time, so each one has its own stack trace. */
+const spotifyShortLinkError = () =>
+  new UserError(
+    "spotify.link short links aren't supported. Open the link in a browser and paste the address it goes to " +
+      "(it starts with https://open.spotify.com/).",
+  );
 
 /** A new error each time, so each one has its own stack trace. */
 const personalMixError = () =>

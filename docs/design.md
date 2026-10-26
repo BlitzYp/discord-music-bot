@@ -24,6 +24,7 @@ The full design of the bot: decisions, how each part should work, and the planne
 | Storage | SQLite (`better-sqlite3`) |
 | Hosting | Owner's home machine (Windows); Tailscale Funnel for a public HTTPS URL; the owner starts everything by hand (no background service) |
 | Text search | YouTube Music first, then YouTube (Lavalink's plugin), or yt-dlp; the first result's link is queued |
+| Spotify links | Read from Spotify's public embed page (no keys); each song is played as a YouTube search |
 
 ## Architecture
 
@@ -142,7 +143,7 @@ No YouTube, SoundCloud or Bandcamp API keys are needed: Lavalink and yt-dlp work
 
 Possibly needed later:
 - **YouTube blocking:** if YouTube starts showing "sign in to confirm you're not a bot", the YouTube plugin can be given OAuth or a poToken, and yt-dlp can be given cookies. Use a throwaway Google account for this, because the account can get flagged.
-- **Spotify links:** would need the LavaSrc plugin plus a Spotify client ID and secret from the Spotify developer dashboard. Not in scope for now.
+- **Spotify links:** built without keys (see "Spotify links"). If Spotify's embed page stops working, the alternative is the LavaSrc plugin plus a Spotify client ID and secret from the Spotify developer dashboard.
 - **Stable public URL:** chosen in milestone 9: Tailscale Funnel (fixed `*.ts.net` URL, free, needs a Tailscale login, no API key in `.env`). The alternatives were Cloudflare quick tunnels (`trycloudflare.com`, a new random URL on every restart, which breaks the OAuth redirect) and a named Cloudflare tunnel (needs a domain on Cloudflare).
 
 ## Data (SQLite, built in milestone 6)
@@ -176,7 +177,7 @@ Saved, per-server playlists, an idea from the owner. They need storage, so they 
 - Limits: names up to 50 characters, unique per server ignoring upper/lower case; at most 500 songs per playlist. When a playlist plays, the server's queue limit and longest-song setting apply; songs left out are counted in the reply.
 - Rename and reorder are on the website only; Discord has `/playlist remove` for removing by position.
 - Only playing a playlist follows `requireSameVoiceChannel`; editing playlists isn't controlling playback.
-- Spotify playlists would need the LavaSrc plugin and Spotify API keys; out of scope.
+- Spotify albums and playlists import too (see "Spotify links"), at most 100 songs.
 
 **Slash commands:** `/playlist list`, `/playlist show <name>`, `/playlist play <name> [mode]`, `/playlist add <name> <link>`, `/playlist remove <name> <position>`, `/playlist create <name>`, `/playlist import <name> <youtube-playlist-link>` (creates the playlist if it doesn't exist), `/playlist save <name>` (the queue), `/playlist delete <name>`. Names are suggested while typing.
 
@@ -207,6 +208,12 @@ POST   /guilds/:id/playlists/from-queue               (dj) { name }
 - The first result's link is queued, not the search, so the song can't change before it plays ("Resolve at play time" re-loads the link).
 - Works in `/play`, "Add a song", `/playlist add` and adding to a playlist on the website. Not for YouTube playlist imports, which need a link.
 - Possible later: choosing from the top 5 results (Discord autocomplete on `/play`, a results list on the website).
+
+## Spotify links (added after milestone 9, at the owner's request)
+- Spotify doesn't allow streaming its audio, so a Spotify song is played from YouTube: the bot reads its artists and title and runs the text search with them. The found link is queued or saved, like any search.
+- Read from Spotify's embed page (`open.spotify.com/embed/<type>/<id>`, JSON in its `__NEXT_DATA__` tag): no account or API keys. The owner chose this over the LavaSrc plugin, which needs a Spotify developer app. It isn't an official API, so it can break when Spotify changes the page; all of it is in `src/player/resolvers/spotify.ts`.
+- Accepted: `open.spotify.com/{track,album,playlist}/<id>` (also `/intl-xx/`, `/embed/`), and `spotify:track:<id>` URIs. Not accepted: artists, podcasts, `spotify.link` short links.
+- Tracks work wherever a link does. Albums and playlists: `/play` and "Add a song" always queue all of them; `/playlist import` and the website's import (DJs) save them. The embed page lists at most 100 songs. Songs are searched 4 at a time (tested 2026-10-26: 100 songs in 14 s through Lavalink); ones with no match are left out and counted.
 
 ## Public URL (built in milestone 9)
 - `npm run funnel` runs `tailscale funnel <WEB_PORT>` in the foreground: the website is public while it runs, which suits the owner starting everything by hand. The server keeps listening on 127.0.0.1.

@@ -144,7 +144,7 @@ function NewPlaylistForm({ guildId, queuedSongs, onCreated }: NewPlaylistFormPro
       <div className="add-song">
         <input
           type="text"
-          placeholder={isImport ? "Name (optional: uses the YouTube playlist's name)" : "Name"}
+          placeholder={isImport ? "Name (optional: uses the linked playlist's name)" : "Name"}
           aria-label="Playlist name"
           maxLength={MAX_PLAYLIST_NAME_LENGTH}
           value={name}
@@ -155,8 +155,8 @@ function NewPlaylistForm({ guildId, queuedSongs, onCreated }: NewPlaylistFormPro
       <div className="add-song">
         <input
           type="url"
-          placeholder="Optional: a YouTube playlist link to import"
-          aria-label="YouTube playlist link to import"
+          placeholder="Optional: a YouTube playlist or Spotify album/playlist link to import"
+          aria-label="YouTube playlist or Spotify album/playlist link to import"
           value={importLink}
           onChange={(event) => setImportLink(event.target.value)}
           disabled={pending}
@@ -167,7 +167,7 @@ function NewPlaylistForm({ guildId, queuedSongs, onCreated }: NewPlaylistFormPro
       </div>
       <p className="muted hint">
         {pending && isImport
-          ? "Reading the YouTube playlist (a few seconds)…"
+          ? "Reading the playlist (a few seconds; Spotify ones take longer, each song is looked up on YouTube)…"
           : "Importing reads up to 500 songs; they're loaded only when they play."}
       </p>
       <p className="hint">

@@ -65,9 +65,11 @@ export const playlist: Command = {
     .addSubcommand((s) =>
       s
         .setName("import")
-        .setDescription("Add a YouTube playlist's songs to a playlist (created if it doesn't exist)")
+        .setDescription("Add a YouTube playlist's or Spotify album/playlist's songs to a playlist (created if needed)")
         .addStringOption(nameOption)
-        .addStringOption((o) => o.setName("link").setDescription("A YouTube playlist link (with list= in it)").setRequired(true)),
+        .addStringOption((o) =>
+          o.setName("link").setDescription("A YouTube playlist link (with list= in it), or a Spotify album or playlist link").setRequired(true),
+        ),
     )
     .addSubcommand((s) =>
       s.setName("save").setDescription("Save the current song and the queue as a new playlist").addStringOption(nameOption),
@@ -195,7 +197,7 @@ async function createPlaylist(interaction: GuildCommandInteraction, { playlists 
   );
 }
 
-/** Adds a YouTube playlist's songs to the named playlist, creating it first if there's none by that name. */
+/** Adds a YouTube or Spotify playlist's songs to the named playlist, creating it first if there's none by that name. */
 async function importPlaylist(interaction: GuildCommandInteraction, { playlists }: Ctx): Promise<void> {
   await interaction.deferReply(); // reading a playlist takes a few seconds
   const name = nameOf(interaction);
@@ -211,6 +213,7 @@ async function importPlaylist(interaction: GuildCommandInteraction, { playlists 
   if (existing) reply += `, ${result.playlist.songCount} in total`;
   reply += ".";
   if (result.didNotFit > 0) reply += ` ${result.didNotFit} didn't fit: the playlist is full.`;
+  for (const note of result.notes) reply += ` ${note}`;
   await interaction.editReply(reply);
 }
 

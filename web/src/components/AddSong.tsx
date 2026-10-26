@@ -1,6 +1,6 @@
 import { type FormEvent, useId, useState } from "react";
 import * as api from "../api";
-import { isYoutubePlaylistLink } from "../shared";
+import { isSpotifyCollectionLink, isYoutubePlaylistLink } from "../shared";
 import { useAction } from "../useAction";
 
 /** "Add a song": search for a song or paste a link, the same as /play in Discord. Only shown to DJs. */
@@ -11,6 +11,8 @@ export function AddSong({ guildId }: { guildId: string }) {
   const [wholePlaylist, setWholePlaylist] = useState(false);
   const { run, pending, error } = useAction();
   const isPlaylistLink = isYoutubePlaylistLink(link);
+  // Spotify albums and playlists always add all of their songs (the server decides that, not a checkbox).
+  const isSpotifyCollection = isSpotifyCollectionLink(link);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -50,8 +52,15 @@ export function AddSong({ guildId }: { guildId: string }) {
           This link is from a YouTube playlist: add all of its songs (up to 500)
         </label>
       )}
+      {isSpotifyCollection && (
+        <p className="hint">This is a Spotify album or playlist: all of its songs are looked up on YouTube and added.</p>
+      )}
       <p className="muted hint">
-        {pending ? "Finding the song. This can take a few seconds…" : "Join a voice channel in Discord to start playing."}
+        {pending
+          ? isSpotifyCollection
+            ? "Finding each song on YouTube. This can take up to half a minute…"
+            : "Finding the song. This can take a few seconds…"
+          : "Join a voice channel in Discord to start playing."}
       </p>
       {error && <p className="hint error-text">{error}</p>}
     </div>

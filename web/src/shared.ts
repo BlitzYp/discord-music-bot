@@ -23,6 +23,7 @@ export type {
   YoutubeMode,
 } from "../../src/shared/settings";
 export { describeAddMany, isYoutubePlaylistLink, MAX_PLAYLIST_NAME_LENGTH, MAX_PLAYLIST_SONGS } from "../../src/shared/playlists";
+export { isSpotifyCollectionLink } from "../../src/shared/spotify";
 export type {
   AddManyResult,
   PlaylistDetails,

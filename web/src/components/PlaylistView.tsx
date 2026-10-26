@@ -1,6 +1,13 @@
 import { type FormEvent, useEffect, useState } from "react";
 import * as api from "../api";
-import { describeAddMany, formatDuration, isYoutubePlaylistLink, type PlaylistDetails, type PlaylistPlayMode } from "../shared";
+import {
+  describeAddMany,
+  formatDuration,
+  isSpotifyCollectionLink,
+  isYoutubePlaylistLink,
+  type PlaylistDetails,
+  type PlaylistPlayMode,
+} from "../shared";
 import { useAction } from "../useAction";
 import { useDragReorder } from "../useDragReorder";
 import { SongTitle } from "./SongTitle";
@@ -177,22 +184,24 @@ export function PlaylistView({ guildId, playlistId, userId, canControl, queuedSo
 interface AddToPlaylistProps {
   guildId: string;
   playlistId: number;
-  /** DJs may add every song of a YouTube playlist at once. */
+  /** DJs may add every song of a YouTube playlist, or a Spotify album or playlist, at once. */
   canImport: boolean;
 }
 
-/** Adds a link to the playlist (anyone), or, for DJs, every song of a YouTube playlist link. */
+/** Adds a link to the playlist (anyone), or, for DJs, every song of a YouTube playlist or Spotify album/playlist link. */
 function AddToPlaylist({ guildId, playlistId, canImport }: AddToPlaylistProps) {
   const [link, setLink] = useState("");
   const [wholePlaylist, setWholePlaylist] = useState(false);
   const { run, pending, error } = useAction();
   const offerImport = canImport && isYoutubePlaylistLink(link);
+  // A Spotify album or playlist has no single song to add instead, so DJs always import all of it.
+  const importSpotify = canImport && isSpotifyCollectionLink(link);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!link.trim()) return;
     await run(async () => {
-      if (offerImport && wholePlaylist) await api.importIntoPlaylist(guildId, playlistId, link);
+      if (importSpotify || (offerImport && wholePlaylist)) await api.importIntoPlaylist(guildId, playlistId, link);
       else await api.addToPlaylist(guildId, playlistId, link);
       setLink("");
       setWholePlaylist(false);
@@ -220,6 +229,7 @@ function AddToPlaylist({ guildId, playlistId, canImport }: AddToPlaylistProps) {
           This link is from a YouTube playlist: add all of its songs
         </label>
       )}
+      {importSpotify && <p className="hint">This is a Spotify album or playlist: all of its songs are looked up on YouTube and added.</p>}
       {error && <p className="hint error-text">{error}</p>}
     </form>
   );

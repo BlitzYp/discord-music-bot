@@ -2,6 +2,7 @@ import { SlashCommandBuilder } from "discord.js";
 import { levelOf } from "../../permissions.js";
 import { UserError } from "../../player/errors.js";
 import { isYoutubePlaylistLink } from "../../shared/playlists.js";
+import { isSpotifyCollectionLink } from "../../shared/spotify.js";
 import { describeAddMany, escapeMarkdown, formatItem } from "../format.js";
 import type { Command, CommandContext, GuildCommandInteraction } from "./types.js";
 
@@ -11,13 +12,13 @@ export const play: Command = {
     .setName("play")
     .setDescription("Play a link or an audio file, or add it to the queue")
     .addStringOption((o) =>
-      o.setName("query").setDescription("A song to search YouTube for, or a YouTube, SoundCloud, Bandcamp, Twitch or audio link"),
+      o.setName("query").setDescription("A song to search for, or a YouTube, Spotify, SoundCloud, Bandcamp, Twitch or audio link"),
     )
     .addAttachmentOption((o) =>
       o.setName("file").setDescription("An audio file to play. It's also saved to this server's library."),
     )
     .addBooleanOption((o) =>
-      o.setName("playlist").setDescription("For a YouTube playlist link: queue every song of the playlist (up to 500)"),
+      o.setName("playlist").setDescription("YouTube playlist links: queue the whole playlist (up to 500). Spotify albums/playlists always do."),
     ),
 
   async execute(interaction, ctx) {
@@ -37,9 +38,11 @@ export const play: Command = {
     };
 
     const isPlaylistLink = isYoutubePlaylistLink(request.input);
-    if (isPlaylistLink && interaction.options.getBoolean("playlist")) {
-      const { title, result } = await ctx.players.playPlaylistLink(interaction.guildId, request);
-      await interaction.editReply(`From **${escapeMarkdown(title)}**: ${describeAddMany(result)}`);
+    // A Spotify album or playlist has no "this one song" to play instead, so it always queues all of its songs.
+    const queueWholePlaylist = (isPlaylistLink && interaction.options.getBoolean("playlist")) || isSpotifyCollectionLink(request.input);
+    if (queueWholePlaylist) {
+      const { title, result, notes } = await ctx.players.playPlaylistLink(interaction.guildId, request);
+      await interaction.editReply([`From **${escapeMarkdown(title)}**: ${describeAddMany(result)}`, ...notes].join(" "));
       return;
     }
 

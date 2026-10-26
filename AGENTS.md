@@ -7,7 +7,7 @@ A self-hosted Discord bot that plays audio in voice channels, controlled by slas
 - With no DJ role picked, only admins control playback; a server admin picks one (or @everyone) on the website's Settings tab.
 - The public website is the build (`npm start`); `npm run dev` only serves the page to this PC. The owner logs in to Tailscale and switches Funnel on themselves.
 - `npm run dev` restarts on every save in `src/`. Since milestone 6 the queue survives that (the bot rejoins and continues), but warn the owner before editing `src/` while they're listening.
-- Extras the owner asked for along the way: `/filter` effects (working, also on the website), seeking (`/seek` and the website's progress bar), a "Recently played" list, and the bot's Discord status showing what it's playing, which the owner can override on the Admin page (written). In Discord the bot is called Brick Maback.
+- Extras the owner asked for along the way: `/filter` effects (working, also on the website), seeking (`/seek` and the website's progress bar), a "Recently played" list, the bot's Discord status showing what it's playing, which the owner can override on the Admin page (written), and Spotify links, played as YouTube searches (written; see "Spotify links" in docs/design.md). In Discord the bot is called Brick Maback.
 
 ## Where to look
 

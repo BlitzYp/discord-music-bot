@@ -12,8 +12,8 @@ const link = z.string().trim().min(1, "paste a link");
 const song = z.string().trim().min(1, "type a song or paste a link");
 
 /**
- * POST /playlists: a new empty playlist ({ name }), or one imported from a YouTube playlist ({ importUrl }, with
- * an optional name; without one it's named after the YouTube playlist).
+ * POST /playlists: a new empty playlist ({ name }), or one imported from a YouTube playlist or a Spotify album or
+ * playlist ({ importUrl }, with an optional name; without one it's named after the linked playlist).
  */
 const createBody = z
   .object({ name: name.optional(), importUrl: link.optional() })
@@ -21,7 +21,7 @@ const createBody = z
   .refine((body) => body.name !== undefined || body.importUrl !== undefined, "Give the playlist a name.");
 /**
  * POST /playlists/:playlistId/items: one song ({ input }: a link or a search), or every song of a YouTube playlist
- * ({ importUrl }, DJs).
+ * or a Spotify album or playlist ({ importUrl }, DJs).
  */
 const addItemsBody = z
   .object({ input: song.optional(), importUrl: link.optional() })

@@ -75,7 +75,7 @@ export const addToQueue = (guildId: string, input: string): State => request("PO
 /** Queues a file from the server's library. */
 export const addLibraryFileToQueue = (guildId: string, fileId: string): State =>
   request("POST", `/guilds/${guildId}/queue`, { fileId });
-/** Queues every song of a YouTube playlist link (up to 500). */
+/** Queues every song of a YouTube playlist link (up to 500). Spotify album and playlist links do this with addToQueue too. */
 export const addWholePlaylistToQueue = (guildId: string, input: string): State =>
   request("POST", `/guilds/${guildId}/queue`, { input, wholePlaylist: true });
 export const removeFromQueue = (guildId: string, itemId: string): State =>
@@ -110,7 +110,7 @@ export const fetchPlaylists = (guildId: string): Promise<PlaylistSummary[]> => r
 export const fetchPlaylist = (guildId: string, playlistId: number): Playlist =>
   request("GET", `${playlistsPath(guildId)}/${playlistId}`);
 export const createPlaylist = (guildId: string, name: string): Playlist => request("POST", playlistsPath(guildId), { name });
-/** Creates a playlist from a YouTube playlist link. Without a name it's named after the YouTube playlist. */
+/** Creates a playlist from a YouTube playlist or Spotify album/playlist link. Without a name it's named after it. */
 export const importPlaylist = (guildId: string, importUrl: string, name?: string): Playlist =>
   request("POST", playlistsPath(guildId), { importUrl, name });
 /** Saves the current song plus the queue as a new playlist. */
@@ -129,7 +129,7 @@ export const playPlaylist = (
 
 export const addToPlaylist = (guildId: string, playlistId: number, input: string): Playlist =>
   request("POST", `${playlistsPath(guildId)}/${playlistId}/items`, { input });
-/** Adds every song of a YouTube playlist link to the playlist (DJs). */
+/** Adds every song of a YouTube playlist or Spotify album/playlist link to the playlist (DJs). */
 export const importIntoPlaylist = (guildId: string, playlistId: number, importUrl: string): Playlist =>
   request("POST", `${playlistsPath(guildId)}/${playlistId}/items`, { importUrl });
 export const removeFromPlaylist = (guildId: string, playlistId: number, itemId: number): Playlist =>

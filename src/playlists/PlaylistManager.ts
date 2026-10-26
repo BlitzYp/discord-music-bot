@@ -3,12 +3,11 @@ import { EventEmitter } from "node:events";
 import type { NewPlaylistItem, PlaylistStore } from "../db/playlistStore.js";
 import { NotAllowedError, UserError } from "../player/errors.js";
 import type { PlayerManager, VoiceRequest } from "../player/PlayerManager.js";
-import { findSong, listPlaylist, type PlaylistEntry, parseInput } from "../player/resolvers/index.js";
+import { findSong, type ListedPlaylist, listPlaylist, type PlaylistEntry } from "../player/resolvers/index.js";
 import {
   type AddManyResult,
   type AddedBy,
   MAX_PLAYLIST_NAME_LENGTH,
-  isYoutubePlaylistLink,
   MAX_PLAYLIST_SONGS,
   type PlaylistDetails,
   type PlaylistItem,
@@ -35,6 +34,8 @@ export interface ImportResult {
   added: number;
   /** Songs left out because the playlist reached MAX_PLAYLIST_SONGS. */
   didNotFit: number;
+  /** Sentences like "2 songs weren't found on YouTube." (Spotify imports). */
+  notes: string[];
 }
 
 /**
@@ -93,20 +94,20 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> {
   }
 
   /**
-   * Creates a playlist from a playlist link (a YouTube playlist, or a video opened from one). Without a name,
-   * it's named after the YouTube playlist (with a number added if that name is taken).
+   * Creates a playlist from a playlist link (a YouTube playlist or a video opened from one, or a Spotify album or
+   * playlist). Without a name, it's named after the linked playlist (with a number added if that name is taken).
    */
   async createFromLink(guildId: string, name: string | null, url: string, createdBy: AddedBy): Promise<ImportResult> {
     // Check the name before reading the playlist, so a taken name fails straight away.
     const chosenName = name?.trim() ? this.checkNewName(guildId, name) : null;
-    const { title, entries } = await this.readPlaylistLink(url, MAX_PLAYLIST_SONGS);
+    const { title, entries, notes } = await this.readPlaylistLink(url, MAX_PLAYLIST_SONGS, createdBy);
 
     // Reading the playlist took a few seconds; check the name again in case someone took it meanwhile.
     const finalName = chosenName ? this.checkNewName(guildId, chosenName) : this.freeNameLike(guildId, title);
     const playlistId = this.store.create(guildId, finalName, createdBy);
     this.store.addItems(playlistId, entries.map((entry) => toNewItem(entry, createdBy)));
     this.emit("change", guildId);
-    return { playlist: this.store.summary(guildId, playlistId)!, added: entries.length, didNotFit: 0 };
+    return { playlist: this.store.summary(guildId, playlistId)!, added: entries.length, didNotFit: 0, notes };
   }
 
   rename(guildId: string, playlistId: number, name: string): PlaylistSummary {
@@ -175,13 +176,18 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> {
   /** Adds the songs of a playlist link to the end of an existing playlist (DJs), as many as fit. */
   async importInto(guildId: string, playlistId: number, url: string, addedBy: AddedBy): Promise<ImportResult> {
     const room = this.checkRoom(this.get(guildId, playlistId));
-    const { entries } = await this.readPlaylistLink(url, room);
+    const { entries, notes } = await this.readPlaylistLink(url, room, addedBy);
 
     const playlist = this.get(guildId, playlistId);
     const fitting = entries.slice(0, MAX_PLAYLIST_SONGS - playlist.songCount);
     this.store.addItems(playlist.id, fitting.map((entry) => toNewItem(entry, addedBy)));
     this.emit("change", guildId);
-    return { playlist: this.store.summary(guildId, playlist.id)!, added: fitting.length, didNotFit: entries.length - fitting.length };
+    return {
+      playlist: this.store.summary(guildId, playlist.id)!,
+      added: fitting.length,
+      didNotFit: entries.length - fitting.length,
+      notes,
+    };
   }
 
   /** Removes a song. DJs may remove any song; everyone else only the songs they added themselves. */
@@ -274,13 +280,15 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> {
     return room;
   }
 
-  /** Reads up to `limit` songs from a YouTube playlist link. */
-  private readPlaylistLink(url: string, limit: number): Promise<{ title: string; entries: PlaylistEntry[] }> {
-    const source = parseInput(url);
-    if (!isYoutubePlaylistLink(source.url)) {
-      throw new UserError(`That isn't a YouTube playlist link (one with "list=" in it).`);
-    }
-    return listPlaylist(source.url, limit);
+  /** Reads up to `limit` songs from a YouTube playlist link, or a Spotify album or playlist link. */
+  private readPlaylistLink(url: string, limit: number, importedBy: AddedBy): Promise<ListedPlaylist> {
+    const search = {
+      lavalink: this.players.lavalink,
+      // Imports can come from Discord or the website; the found tracks are thrown away, so "via" doesn't matter.
+      requester: { id: importedBy.id, name: importedBy.name, via: "discord" as const },
+      youtubeMode: this.players.settings.global().youtubeMode,
+    };
+    return listPlaylist(url, limit, search);
   }
 }
 

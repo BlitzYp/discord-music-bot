@@ -35,7 +35,7 @@ His name, avatar and bio are set in the [Discord Developer Portal](https://disco
 
 | Command | What it does |
 |---|---|
-| `/play <song or link>` | Joins your voice channel and plays the song, or adds it to the queue if something is already playing. Type a song's name (like `daft punk one more time`) to play the best match from YouTube, or paste a link. For a YouTube playlist link, add `playlist: True` to queue every song of the playlist (up to 500). |
+| `/play <song or link>` | Joins your voice channel and plays the song, or adds it to the queue if something is already playing. Type a song's name (like `daft punk one more time`) to play the best match from YouTube, or paste a link. For a YouTube playlist link, add `playlist: True` to queue every song of the playlist (up to 500). Spotify links work too (see "Spotify links" below). |
 | `/play file:<attachment>` | Plays an audio file you attach, and saves it to the server's library (see below). |
 | `/pause` / `/resume` | Pauses or resumes the current track. After a restart, `/resume` joins your voice channel and continues the song where it stopped. |
 | `/skip` | Skips to the next track |
@@ -53,6 +53,14 @@ His name, avatar and bio are set in the [Discord Developer Portal](https://disco
 
 The bot leaves the voice channel by itself, clearing the queue, after being alone in it for 60 seconds (changeable per server).
 
+### Spotify links
+
+Spotify doesn't let bots play its music, so for a Spotify link the bot reads the song's artist and title from Spotify and plays the best match from YouTube Music, the same as typing the song's name. No Spotify account or keys are needed.
+
+- **A song** (`https://open.spotify.com/track/...`): works everywhere a link does: `/play`, "Add a song", `/playlist add`.
+- **An album or playlist** (`.../album/...`, `.../playlist/...`): `/play` and "Add a song" always queue all of its songs; `/playlist import` and the website's import copy them into a saved playlist. Each song is looked up on YouTube, about 15 seconds for 100 songs. Spotify only shows the bot the first 100 songs of a playlist.
+- The YouTube video that was found is what gets queued or saved, so the song can't change later.
+
 ### Playlists
 
 Each server has its own saved playlists. Songs are saved as links, so a playlist never goes stale: each song is loaded when it plays. Discord suggests playlist names as you type.
@@ -65,7 +73,7 @@ Each server has its own saved playlists. Songs are saved as links, so a playlist
 | `/playlist remove <name> <position>` | everyone | Removes a song (positions are the numbers in `/playlist show`). DJs can remove any song; everyone else only the songs they added. |
 | `/playlist play <name> [mode]` | DJs | **Replaces** the queue with the playlist: the current song stops and the playlist starts from the top. With `mode: add to queue`, the songs go to the end of the queue instead. |
 | `/playlist create <name>` | DJs | Creates an empty playlist |
-| `/playlist import <name> <link>` | DJs | Copies a YouTube playlist's songs (up to 500) into a playlist, creating it if there's none with that name. Takes a few seconds. |
+| `/playlist import <name> <link>` | DJs | Copies a YouTube playlist's songs (up to 500), or a Spotify album's or playlist's (up to 100), into a playlist, creating it if there's none with that name. Takes a few seconds; Spotify ones up to half a minute. |
 | `/playlist save <name>` | DJs | Saves the current song and the queue as a new playlist |
 | `/playlist delete <name>` | DJs | Deletes a playlist |
 
@@ -162,7 +170,7 @@ The **Player** tab starts with the current song, artwork, progress and playback 
 
 - **Everyone** sees the current song with its progress bar, the active effect, the queue, and the recently played songs. Click a song's title to open it on YouTube (or wherever it's from) in a new tab.
 - **DJs** also get the controls: add a link, pause/resume, skip, stop, drag the progress bar to seek, volume, loop, effects, reorder queued songs by dragging them (or with ↑↓; dragging doesn't work on most phones), remove queued songs, shuffle, clear the queue (the current song keeps playing), and the **+** button on recently played songs to add them to the queue again, or clear that list.
-- Adding a song from the website joins the voice channel you're in, like `/play`. When you paste a link from a YouTube playlist, a checkbox offers to add the whole playlist.
+- Adding a song from the website joins the voice channel you're in, like `/play`. When you paste a link from a YouTube playlist, a checkbox offers to add the whole playlist. A Spotify album or playlist link always adds all of its songs.
 - The **Library** tab (everyone) lists the server's uploaded files, with a search box, how much space they use, and who uploaded each. Uploaders (DJs, unless a server admin changed it) get **Upload audio files**: pick one or more files and they upload one after another, with a progress bar. DJs also get **+** to add a file to the queue and **✕** to delete it.
 - The **Playlists** tab (everyone) lists the server's playlists; click one to see its songs. Everyone can add songs and remove the ones they added. DJs also get **Play** (replaces the queue; it asks first if something is queued), **Add to queue**, dragging (or ↑↓) to reorder, remove any song, **Rename**, **Delete**, a "New playlist" form (empty, or imported from a YouTube playlist link) and **Save the queue as a playlist**. Changes show up live for everyone, including ones made in Discord.
 - **Server admins** get a **Settings** tab for that server:
@@ -245,7 +253,13 @@ Other scripts:
 - **Friends get "You need to be a DJ"**: the server has no DJ role yet, so only admins can control playback. A server admin opens the website → the server → **Settings** → DJ role, and picks a role (or `@everyone`).
 - **"Join the bot's voice channel (…) to control playback"**: the server's "Only from the bot's voice channel" setting is on. Join that channel, or ask an admin to turn the setting off.
 - **"Playback stopped when the bot restarted"**: the bot restarted while nobody was in its voice channel (or the song was paused). Use `/resume` (or Resume on the website) from a voice channel to carry on.
-- **"That isn't a YouTube playlist link"**: importing needs a link with `list=` in it, like `https://www.youtube.com/playlist?list=...` or a video opened from a playlist. Spotify playlists aren't supported.
+- **"That isn't a playlist link"** / **"That isn't a YouTube playlist link"**: importing needs a YouTube link with `list=` in it, like `https://www.youtube.com/playlist?list=...` or a video opened from a playlist, or a Spotify album or playlist link.
+- **A Spotify song plays the wrong version** (a live version, a cover): the bot plays YouTube's best match for the artist and title. Search for the song by name with more detail, or paste the YouTube link instead.
+- **"N songs weren't found on YouTube"** after adding a Spotify playlist: YouTube had no match for those songs, so they were left out. The bot's terminal lists which ones.
+- **Only 100 songs of a Spotify playlist were added**: Spotify only shows the bot the first 100. Split the playlist in Spotify, or import it in parts.
+- **"Spotify says that playlist doesn't exist"**: it's private. Make it public in Spotify.
+- **"spotify.link short links aren't supported"**: open the link in a browser and paste the `https://open.spotify.com/...` address it goes to.
+- **Every Spotify link fails** with an error saying Spotify's embed page looks different: Spotify changed its page. The fix goes in `src/player/resolvers/spotify.ts`.
 - **"That's a YouTube mix made for your account"**: personal mixes (Replay Mix, My Supermix, Discover Mix…) exist only for you while signed in, and the bot isn't signed in to YouTube. In YouTube Music, open the mix → ⋮ → **Save to playlist**, make that playlist Public or Unlisted, and import it. Mixes started from a song (a link with both `v=` and `list=RD…`) work as they are.
 - **"YouTube says that playlist doesn't exist"**: it's private (or was deleted). Set it to Public or Unlisted in YouTube.
 - **An import has fewer songs than the YouTube playlist**: private and deleted videos are skipped, and at most 500 songs are read.
@@ -283,7 +297,7 @@ src/
     PlayerManager.ts    The one entry point for playback; commands call this
     GuildPlayer.ts      One server's current track and queue
     lavalink.ts         Connection to the Lavalink server
-    resolvers/          Turns a link into a track Lavalink can play (through Lavalink, or a yt-dlp download)
+    resolvers/          Turns a link into a track Lavalink can play (through Lavalink, or a yt-dlp download); reads Spotify links
     filters.ts          Applies the audio effects (the list itself is in src/shared/filters.ts)
     errors.ts           UserError: errors whose message is shown to users
   playlists/
