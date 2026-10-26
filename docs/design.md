@@ -22,14 +22,15 @@ The full design of the bot: decisions, how each part should work, and the planne
 | Voice-channel requirement | Not required to control playback (`requireSameVoiceChannel` defaults to off) |
 | Queue persistence | Queues and player state are saved to SQLite and restored after a restart |
 | Storage | SQLite (`better-sqlite3`) |
-| Hosting | Owner's home machine (Windows); Cloudflare Tunnel for a public HTTPS URL |
+| Hosting | Owner's home machine (Windows); Tailscale Funnel for a public HTTPS URL; the owner starts everything by hand (no background service) |
+| Text search | YouTube Music first, then YouTube (Lavalink's plugin), or yt-dlp; the first result's link is queued |
 
 ## Architecture
 
 ```
 Discord users ── slash commands ──┐
                                   ▼
-Browser ── HTTPS (CF Tunnel) ──▶ Node process (TypeScript)
+Browser ── HTTPS (Tailscale Funnel) ──▶ Node process (TypeScript)
         ◀─ Socket.IO updates ──   ├─ discord.js bot
                                   ├─ Express API + Socket.IO
                                   ├─ PlayerManager (one GuildPlayer per server)
@@ -86,7 +87,7 @@ The fallback for when the big services break: people can play files they already
 ## Auth & permissions (built in milestone 5)
 
 - OAuth2 scope: `identify` only. The bot looks up which servers a user is in, and their roles there, itself (see below), so the website never needs to keep a Discord token.
-- Sessions live in a signed cookie (`cookie-session`, signed with `SESSION_SECRET`) holding just the user's id, name and avatar: `httpOnly`, `sameSite=lax`, and `secure` once `PUBLIC_URL` is https. Logins survive bot restarts and no session table is needed. (The original plan was `express-session` with a SQLite store; the cookie is simpler and needs no database.)
+- Sessions live in a signed cookie (`cookie-session`, signed with `SESSION_SECRET`) holding just the user's id, name and avatar: `httpOnly`, `sameSite=lax`, and `secure` for requests that came over https (the public URL; see "Public URL"). Logins survive bot restarts and no session table is needed. (The original plan was `express-session` with a SQLite store; the cookie is simpler and needs no database.)
 - Add the OAuth2 redirect `<PUBLIC_URL>/api/auth/callback` in the Developer Portal under OAuth2 → Redirects.
 - The dashboard lists servers where the user is a member **and** the bot is present, found by looking the user up in each of the bot's servers.
 - Changes must be sent as JSON; the server refuses anything else (415). Together with `sameSite=lax` this stops other websites from making changes through a logged-in browser.
@@ -141,7 +142,7 @@ No YouTube, SoundCloud or Bandcamp API keys are needed: Lavalink and yt-dlp work
 Possibly needed later:
 - **YouTube blocking:** if YouTube starts showing "sign in to confirm you're not a bot", the YouTube plugin can be given OAuth or a poToken, and yt-dlp can be given cookies. Use a throwaway Google account for this, because the account can get flagged.
 - **Spotify links:** would need the LavaSrc plugin plus a Spotify client ID and secret from the Spotify developer dashboard. Not in scope for now.
-- **Stable public URL:** Cloudflare quick tunnels (`trycloudflare.com`) get a new random URL on every restart, which breaks the OAuth redirect. A named tunnel needs a free Cloudflare account plus a domain on Cloudflare. Tailscale Funnel is a free alternative with a fixed `*.ts.net` URL. Point the tunnel (`cloudflared`) at `WEB_PORT` and use its URL as `PUBLIC_URL`.
+- **Stable public URL:** chosen in milestone 9: Tailscale Funnel (fixed `*.ts.net` URL, free, needs a Tailscale login, no API key in `.env`). The alternatives were Cloudflare quick tunnels (`trycloudflare.com`, a new random URL on every restart, which breaks the OAuth redirect) and a named Cloudflare tunnel (needs a domain on Cloudflare).
 
 ## Data (SQLite, built in milestone 6)
 `data/bot.db`, opened with `better-sqlite3` in WAL mode. The tables are created by numbered migrations in [src/db/migrations.ts](../src/db/migrations.ts); SQLite's `user_version` counts how many have run.
@@ -199,6 +200,20 @@ POST   /guilds/:id/playlists/:playlistId/play         (dj) { mode: "replace" | "
 POST   /guilds/:id/playlists/from-queue               (dj) { name }
 ```
 
+## Text search (built in milestone 9)
+- Input that isn't an http(s) link is a search (at most 200 characters). With the owner's `youtubeMode`: `lavalink` searches through the YouTube plugin, `ytdlp` with `yt-dlp --flat-playlist -J ytsearch1:<query>`, `auto` the plugin first.
+- The plugin searches YouTube Music (`ytmsearch:`) first: it returns the song's album audio, where YouTube returns the music video (often with an intro). Plain YouTube (`ytsearch:`) is asked when YouTube Music finds nothing. Tested 2026-10-26: about 0.4 s each through Lavalink, 2 s through yt-dlp.
+- The first result's link is queued, not the search, so the song can't change before it plays ("Resolve at play time" re-loads the link).
+- Works in `/play`, "Add a song", `/playlist add` and adding to a playlist on the website. Not for YouTube playlist imports, which need a link.
+- Possible later: choosing from the top 5 results (Discord autocomplete on `/play`, a results list on the website).
+
+## Public URL (built in milestone 9)
+- `npm run funnel` runs `tailscale funnel <WEB_PORT>` in the foreground: the website is public while it runs, which suits the owner starting everything by hand. The server keeps listening on 127.0.0.1.
+- Express trusts `X-Forwarded-*` from loopback only (`trust proxy: loopback`); Funnel sets `X-Forwarded-Proto: https`, so `req.secure` is right and the session cookie is `secure` exactly for https requests.
+- OAuth: logins started on `localhost` use the localhost redirect; the rest use `OAUTH_REDIRECT_URI` (`<PUBLIC_URL>/api/auth/callback`). Both are registered in the Developer Portal, so local logins work while Funnel is off.
+- `npm run dev` serves the website only to local requests (Vite's dev server can serve project files); the public website is the build (`npm run build`, `npm start`).
+- Not done (the owner's choice): running as a background service (pm2, NSSM or a logon task). The owner starts Lavalink, the bot and the funnel themselves.
+
 ## Real-time (Socket.IO, built in milestone 4)
 - The client sends `guild:watch <id>` and joins the room `guild:<id>`. From milestone 5, the server first checks that the logged-in user is a member of that server.
 - Server → client: `state` (full snapshot on join), `queue:update`, `track:start`, `track:end`, `player:update` (position, paused, volume, loop mode, filter; about once per second while playing), `error`, `playlists:update` (milestone 7), `library:update` (milestone 8). The types live in `src/shared/types.ts`.
@@ -212,7 +227,7 @@ POST   /guilds/:id/playlists/from-queue               (dj) { name }
 The Player tab puts the current song in a full-width section at the top: artwork and title, then progress and playback controls. Audio effects expand below the controls, with the active effect shown in the summary. Adding a song belongs with the queue: the form sits under **Up next**, outside a height-limited, keyboard-scrollable song list. **Recently played** sits beside the queue on wide screens and follows it on smaller screens, with a **+** action to queue a song again. Neutral surfaces, text-style secondary actions, list dividers and underlined navigation follow the system's light/dark theme. Artwork has a consistent fallback when an image is unavailable. On phones, row actions wrap below song details; move buttons remain available where dragging is unsupported. This layout uses the existing API and permission checks.
 
 ### Slash commands
-`/play <query|url> [playlist]` · `/play file:<attachment>` · `/playlist …` (see "Playlists") · `/skip` · `/stop` · `/pause` · `/resume` · `/queue` · `/nowplaying` · `/remove <pos>` · `/move <from> <to>` · `/shuffle` · `/loop off|track|queue` · `/volume <0-150>` · `/filter <effect>` · `/seek <time>` · `/library list|play|upload|delete` · `/dashboard` (link to the website)
+`/play <song name|url> [playlist]` · `/play file:<attachment>` · `/playlist …` (see "Playlists") · `/skip` · `/stop` · `/pause` · `/resume` · `/queue` · `/nowplaying` · `/remove <pos>` · `/move <from> <to>` · `/shuffle` · `/loop off|track|queue` · `/volume <0-150>` · `/filter <effect>` · `/seek <time>` · `/library list|play|upload|delete` · `/dashboard` (link to the website)
 
 `/filter` (added alongside milestone 3, at the owner's request) uses Lavalink's built-in filters: nightcore, vaporwave, bassboost, 8d, karaoke, soft, or off. One effect at a time, kept on the player until changed. The website offers the same list (`AUDIO_FILTERS` in `src/shared/filters.ts`) through `POST /guilds/:id/player/filter { filter }`, which needs DJ permission from milestone 5.
 

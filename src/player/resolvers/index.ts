@@ -2,8 +2,8 @@ import type { LavalinkManager, Track } from "lavalink-client";
 import type { YoutubeMode } from "../../shared/settings.js";
 import type { QueueItem, Requester, TrackSource } from "../../shared/types.js";
 import { UserError } from "../errors.js";
-import { loadFileWithLavalink, loadUrlWithLavalink } from "./lavalink.js";
-import { downloadAudio, fetchInfo, fetchPlaylist } from "./ytdlp.js";
+import { loadFileWithLavalink, loadUrlWithLavalink, searchWithLavalink } from "./lavalink.js";
+import { downloadAudio, fetchInfo, fetchPlaylist, searchYoutubeWithYtDlp, type YtDlpPlaylistEntry } from "./ytdlp.js";
 
 const YOUTUBE_HOSTS = new Set(["youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be"]);
 
@@ -25,13 +25,87 @@ export interface ResolvedTrack {
 /** The display fields of a QueueItem, read when it's added. */
 export type TrackMetadata = Pick<QueueItem, "title" | "author" | "durationMs" | "isStream" | "thumbnail">;
 
-/** Turns user input into a TrackSource. Only links are accepted for now. */
+/** The longest search someone can type, in characters. */
+const MAX_SEARCH_LENGTH = 200;
+
+/** A song found from what someone typed: its link, what's shown for it, and the loaded track if Lavalink loaded it. */
+export interface FoundSong {
+  source: TrackSource;
+  meta: TrackMetadata;
+  /** Reused to start playing right away, so the link isn't loaded twice. */
+  track?: Track;
+}
+
+/**
+ * Finds the song someone asked for in /play, "Add a song" or a playlist: a link is loaded as it is; anything else
+ * is searched for on YouTube. Either way the result is a link, which is what the queue stores: searching again
+ * when the song plays could find a different video.
+ */
+export async function findSong(
+  lavalink: LavalinkManager,
+  input: string,
+  requester: Requester,
+  youtubeMode: YoutubeMode,
+): Promise<FoundSong> {
+  if (isLink(input)) {
+    const source = parseInput(input);
+    return { source, ...(await fetchMetadata(lavalink, source, requester, youtubeMode)) };
+  }
+  return searchYoutube(lavalink, input, requester, youtubeMode);
+}
+
+/** Whether the input is an http(s) link (otherwise it's searched for). */
+function isLink(input: string): boolean {
+  try {
+    const url = new URL(input.trim());
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Searches YouTube for the best match. The owner's YouTube setting decides how, like for YouTube links: through
+ * Lavalink's plugin, through yt-dlp, or the plugin first ("auto").
+ */
+async function searchYoutube(
+  lavalink: LavalinkManager,
+  input: string,
+  requester: Requester,
+  youtubeMode: YoutubeMode,
+): Promise<FoundSong> {
+  const query = input.trim().replace(/\s+/g, " ");
+  if (query === "") throw new UserError("Type a song to search for, or paste a link.");
+  if (query.length > MAX_SEARCH_LENGTH) throw new UserError(`Searches can be at most ${MAX_SEARCH_LENGTH} characters long.`);
+
+  // Searching is YouTube, so it uses the same methods as a YouTube link.
+  const methods = methodsFor({ kind: "youtube", url: "" }, youtubeMode);
+  let lastError: unknown;
+  for (const method of methods) {
+    try {
+      if (method === "lavalink") {
+        const track = await searchWithLavalink(lavalink, query, requester);
+        return { source: parseInput(track.info.uri!), meta: metadataFromTrack(track), track };
+      }
+      const entry = await searchYoutubeWithYtDlp(query);
+      const song = entry && songFromEntry(entry);
+      if (!song) throw new UserError(`Nothing was found on YouTube for "${query}".`);
+      return song;
+    } catch (error) {
+      lastError = error;
+      logFallback(method, `the search "${query}"`, error, methods);
+    }
+  }
+  throw lastError;
+}
+
+/** Turns user input into a TrackSource. Only links; `findSong` handles searches. */
 export function parseInput(input: string): Extract<TrackSource, { url: string }> {
   let url: URL;
   try {
     url = new URL(input.trim());
   } catch {
-    throw new UserError("Please paste a link (YouTube, SoundCloud, Bandcamp, Twitch or a direct audio URL). Text search comes later.");
+    throw new UserError("Please paste a link (YouTube, SoundCloud, Bandcamp, Twitch or a direct audio URL).");
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") throw new UserError("Only http(s) links are supported.");
   return YOUTUBE_HOSTS.has(url.hostname) ? { kind: "youtube", url: url.href } : { kind: "url", url: url.href };
@@ -153,23 +227,8 @@ export async function listPlaylist(url: string, limit: number): Promise<{ title:
   });
   const entries: PlaylistEntry[] = [];
   for (const entry of playlist.entries ?? []) {
-    if (!entry.url || !entry.title || UNAVAILABLE_TITLES.has(entry.title)) continue;
-    let source: TrackSource;
-    try {
-      source = parseInput(entry.url);
-    } catch {
-      continue; // not an http(s) link; nothing we could play
-    }
-    entries.push({
-      source,
-      meta: {
-        title: entry.title,
-        author: entry.uploader ?? entry.channel ?? undefined,
-        durationMs: entry.duration ? Math.round(entry.duration * 1000) : undefined,
-        isStream: false,
-        thumbnail: largestThumbnail(entry.thumbnails),
-      },
-    });
+    const song = songFromEntry(entry);
+    if (song) entries.push(song);
   }
   // A personal mix opened from one of its songs (`watch?v=...&list=RD...`) loads, but with only that one song,
   // because the rest is only shown to its signed-in owner. A real mix has dozens.
@@ -177,6 +236,30 @@ export async function listPlaylist(url: string, limit: number): Promise<{ title:
   if (isMix && entries.length <= 1) throw personalMixError();
   if (entries.length === 0) throw new UserError("No playable songs were found in that playlist.");
   return { title: playlist.title || "Imported playlist", entries };
+}
+
+/**
+ * A video from yt-dlp's list output (a playlist, or search results) as a song, or null if it can't be played:
+ * no link or title, or a private or deleted video.
+ */
+function songFromEntry(entry: YtDlpPlaylistEntry): PlaylistEntry | null {
+  if (!entry.url || !entry.title || UNAVAILABLE_TITLES.has(entry.title)) return null;
+  let source: TrackSource;
+  try {
+    source = parseInput(entry.url);
+  } catch {
+    return null; // not an http(s) link; nothing we could play
+  }
+  return {
+    source,
+    meta: {
+      title: entry.title,
+      author: entry.uploader ?? entry.channel ?? undefined,
+      durationMs: entry.duration ? Math.round(entry.duration * 1000) : undefined,
+      isStream: false,
+      thumbnail: largestThumbnail(entry.thumbnails),
+    },
+  };
 }
 
 /** A new error each time, so each one has its own stack trace. */
@@ -219,9 +302,12 @@ function metadataFromTrack(track: Track): TrackMetadata {
   };
 }
 
-/** Logs that a method failed, when another one is about to be tried. The final failure is reported by the caller. */
-function logFallback(method: ResolveMethod, url: string, error: unknown, methods: ResolveMethod[]): void {
+/**
+ * Logs that a method failed, when another one is about to be tried. The final failure is reported by the caller.
+ * `what` is the link, or a description like `the search "..."`.
+ */
+function logFallback(method: ResolveMethod, what: string, error: unknown, methods: ResolveMethod[]): void {
   if (method === methods.at(-1)) return;
   const reason = error instanceof Error ? error.message.split("\n")[0] : String(error);
-  console.warn(`[resolver] ${method} couldn't load ${url} (${reason}); trying the next method`);
+  console.warn(`[resolver] ${method} couldn't load ${what} (${reason}); trying the next method`);
 }

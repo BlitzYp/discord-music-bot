@@ -203,9 +203,9 @@ function AddToPlaylist({ guildId, playlistId, canImport }: AddToPlaylistProps) {
     <form className="add-to-playlist" onSubmit={submit}>
       <div className="add-song">
         <input
-          type="url"
-          placeholder="Add a song: paste a YouTube, SoundCloud or other link…"
-          aria-label="Link to add to the playlist"
+          type="text"
+          placeholder="Add a song: search for it, or paste a link…"
+          aria-label="Song to add to the playlist"
           value={link}
           onChange={(event) => setLink(event.target.value)}
           disabled={pending}

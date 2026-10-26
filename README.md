@@ -2,7 +2,7 @@
 
 A self-hosted Discord bot that plays music in voice channels. Audio is played by [Lavalink](https://lavalink.dev), a separate Java server that runs next to the bot on the same machine.
 
-**Status:** milestone 8 of 9 (see the milestones in [AGENTS.md](AGENTS.md)). Control playback with slash commands or on the website (log in with Discord). Settings are on the website, queues survive restarts, and each server can keep saved playlists and a library of uploaded audio files.
+**Status:** all 9 milestones built (see [AGENTS.md](AGENTS.md)). Control playback with slash commands or on the website (log in with Discord), which can be made public with Tailscale Funnel. Search for songs by name or paste links; settings are on the website, queues survive restarts, and each server can keep saved playlists and a library of uploaded audio files.
 
 - [How it works](docs/how-it-works.md): a tour of the code, and how to add a command
 - [Design](docs/design.md): the full design and the decisions behind it
@@ -12,7 +12,7 @@ A self-hosted Discord bot that plays music in voice channels. Audio is played by
 
 | Command | What it does |
 |---|---|
-| `/play <link>` | Joins your voice channel and plays the link, or adds it to the queue if something is already playing. For a YouTube playlist link, add `playlist: True` to queue every song of the playlist (up to 500). |
+| `/play <song or link>` | Joins your voice channel and plays the song, or adds it to the queue if something is already playing. Type a song's name (like `daft punk one more time`) to play the best match from YouTube, or paste a link. For a YouTube playlist link, add `playlist: True` to queue every song of the playlist (up to 500). |
 | `/play file:<attachment>` | Plays an audio file you attach, and saves it to the server's library (see below). |
 | `/pause` / `/resume` | Pauses or resumes the current track. After a restart, `/resume` joins your voice channel and continues the song where it stopped. |
 | `/skip` | Skips to the next track |
@@ -38,7 +38,7 @@ Each server has its own saved playlists. Songs are saved as links, so a playlist
 |---|---|---|
 | `/playlist list` | everyone | The server's playlists, with song counts and lengths |
 | `/playlist show <name>` | everyone | The first 15 songs of a playlist (the website shows all of them) |
-| `/playlist add <name> <link>` | everyone | Adds a song to the end of a playlist |
+| `/playlist add <name> <link>` | everyone | Adds a song to the end of a playlist: a link, or a song's name to search for |
 | `/playlist remove <name> <position>` | everyone | Removes a song (positions are the numbers in `/playlist show`). DJs can remove any song; everyone else only the songs they added. |
 | `/playlist play <name> [mode]` | DJs | **Replaces** the queue with the playlist: the current song stops and the playlist starts from the top. With `mode: add to queue`, the songs go to the end of the queue instead. |
 | `/playlist create <name>` | DJs | Creates an empty playlist |
@@ -65,7 +65,9 @@ Who counts as an uploader is a server setting (DJs by default; see Settings belo
 
 **After a restart** (including every save while `npm run dev` runs), the bot remembers each server's song, position, queue, loop mode, effect and recently played list. If people are still in its voice channel, it rejoins and carries on from where it stopped. Otherwise the song waits, paused, until someone uses `/resume` or `/play`.
 
-Supported links: YouTube, SoundCloud, Bandcamp, Twitch, Vimeo, direct audio file URLs, and most other sites [yt-dlp supports](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md). Searching by song name isn't supported yet.
+Supported links: YouTube, SoundCloud, Bandcamp, Twitch, Vimeo, direct audio file URLs, and most other sites [yt-dlp supports](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md).
+
+Anything that isn't a link is searched for on YouTube, and the best match is queued: YouTube Music first (it finds the song itself rather than a music video with an intro), then plain YouTube if that finds nothing. The reply shows which song was found; if it's the wrong one, `/skip` it and add the artist's name to the search, or paste a link.
 
 Links are played through Lavalink when it can. When it can't (YouTube blocks Lavalink's plugin every now and then, and SoundCloud is broken in Lavalink 4.2.2), the bot downloads the song with [yt-dlp](https://github.com/yt-dlp/yt-dlp) instead. That takes about 10 seconds, so expect a short pause on those songs.
 
@@ -133,7 +135,7 @@ npm run dev
 
 While the bot runs, open **http://localhost:3000** (or whatever `WEB_PORT` is) and log in with Discord. You see the servers you share with the bot; with more than one, pick one at the top. Everything updates live as things change in Discord.
 
-The **Player** tab starts with the current song, artwork, progress and playback controls. Expand **Audio effects** below the controls to pick an effect; the current effect is visible while it's closed. Paste a link under **Up next** to add a song. Long queues scroll inside their list, keeping the player and add-song form above them. **Recently played** sits beside the queue on wide screens and below it on smaller screens. The page uses quiet, neutral colors and follows your system's light or dark theme.
+The **Player** tab starts with the current song, artwork, progress and playback controls. Expand **Audio effects** below the controls to pick an effect; the current effect is visible while it's closed. Type a song's name or paste a link under **Up next** to add a song. Long queues scroll inside their list, keeping the player and add-song form above them. **Recently played** sits beside the queue on wide screens and below it on smaller screens. The page uses quiet, neutral colors and follows your system's light or dark theme.
 
 - **Everyone** sees the current song with its progress bar, the active effect, the queue, and the recently played songs. Click a song's title to open it on YouTube (or wherever it's from) in a new tab.
 - **DJs** also get the controls: add a link, pause/resume, skip, stop, drag the progress bar to seek, volume, loop, effects, reorder queued songs by dragging them (or with ↑↓; dragging doesn't work on most phones), remove queued songs, shuffle, clear the queue (the current song keeps playing), and the **+** button on recently played songs to add them to the queue again, or clear that list.
@@ -157,7 +159,33 @@ The **Player** tab starts with the current song, artwork, progress and playback 
 
 Settings apply right away; there's nothing to restart.
 
-For now the website is only reachable from your own computer; making it public is milestone 9. With `npm run dev`, edits to `web/` show up in the browser immediately.
+With `npm run dev`, edits to `web/` show up in the browser immediately. The website is only reachable from your own computer until you make it public (next section).
+
+### Making the website public (Tailscale Funnel)
+
+[Tailscale Funnel](https://tailscale.com/kb/1223/funnel) gives this PC a fixed public address like `https://my-pc.tail1234.ts.net`, for free, so friends can open the website and log in from anywhere. The website is only public while `npm run funnel` runs; Ctrl+C makes it private again.
+
+**Once:**
+
+1. Install Tailscale (`winget install Tailscale.Tailscale`), open it from the taskbar and log in.
+2. Run `npm run funnel`. It prints the PC's public address. The first time, Tailscale prints a link instead, to switch Funnel (and HTTPS certificates) on for your tailnet: open it, allow it, and run `npm run funnel` again.
+3. In `.env`, set `PUBLIC_URL` to that address and `OAUTH_REDIRECT_URI` to the address plus `/api/auth/callback`, e.g.
+   ```
+   PUBLIC_URL=https://my-pc.tail1234.ts.net
+   OAUTH_REDIRECT_URI=https://my-pc.tail1234.ts.net/api/auth/callback
+   ```
+4. In the Discord Developer Portal → your app → **OAuth2** → **Redirects**, add that callback address. Keep the `http://localhost:3000/...` one: logging in on this PC (at http://localhost:3000) keeps using it, so it works while the public address is off.
+
+**Every time** you want friends to use the website, use three terminals:
+
+```
+npm run lavalink
+npm run build      (only after the code changed)
+npm start
+npm run funnel
+```
+
+Use `npm start` (the built website) rather than `npm run dev` while it's public: the development website only opens on this PC, and shows everyone else a message saying so, because Vite's development server could hand out the project's files. `npm run funnel` warns if `PUBLIC_URL` in `.env` doesn't match the address Tailscale gave the PC.
 
 Other scripts:
 
@@ -165,7 +193,8 @@ Other scripts:
 |---|---|
 | `npm run typecheck` | Checks the TypeScript (bot and website) for errors without running anything |
 | `npm run build` | Compiles the bot to `dist/` and the website to `web/dist/` |
-| `npm start` | Runs the compiled build (use this instead of `dev` for day-to-day hosting; run `npm run build` first) |
+| `npm start` | Runs the compiled build (use this instead of `dev` for day-to-day hosting, and always while the website is public; run `npm run build` first) |
+| `npm run funnel` | Makes the website public through Tailscale Funnel until you press Ctrl+C (see "Making the website public") |
 
 ## Troubleshooting
 
@@ -180,7 +209,14 @@ Other scripts:
 - **An error starting with "yt-dlp:"**: yt-dlp couldn't get the song either; its message usually says why (private video, region-locked, removed). If YouTube songs that should work fail this way, restart the bot so it updates yt-dlp.
 - **The website doesn't load**: check the bot's console. `[web] website running at ...` means it's up; `[web] the website couldn't start` says why (often another program already uses port 3000; change `WEB_PORT` in `.env`). The Discord side keeps working either way.
 - **"The website hasn't been built yet"** with `npm start`: run `npm run build` first.
-- **Discord says "Invalid OAuth2 redirect_uri"** when logging in: add `http://localhost:3000/api/auth/callback` (exactly, matching `OAUTH_REDIRECT_URI`) under OAuth2 → Redirects in the Developer Portal.
+- **Discord says "Invalid OAuth2 redirect_uri"** when logging in: on this PC, `http://localhost:3000/api/auth/callback` must be listed under OAuth2 → Redirects in the Developer Portal; through the public address, `OAUTH_REDIRECT_URI` must be (exactly, e.g. `https://my-pc.tail1234.ts.net/api/auth/callback`).
+- **Friends see "The bot's website is running in development mode"**: the bot runs with `npm run dev`, whose website only opens on this PC. Stop it and run `npm run build`, then `npm start`.
+- **`npm run funnel` says "Tailscale isn't connected"**: open Tailscale from the taskbar and log in (or run `tailscale up`).
+- **`npm run funnel` prints a link to "enable Funnel"**: Funnel isn't switched on for your tailnet yet. Open the link, allow it, and run `npm run funnel` again.
+- **The public address doesn't load at all**: is `npm run funnel` still running, and the bot too? The first visit after switching Funnel on can take a minute while Tailscale gets the HTTPS certificate.
+- **Logging in through the public address goes back to localhost**: `PUBLIC_URL` / `OAUTH_REDIRECT_URI` in `.env` are still the localhost ones. Set them as described in "Making the website public", then restart the bot.
+- **The public website doesn't show the latest changes**: `npm start` runs the last build. Run `npm run build` and restart it.
+- **A search plays the wrong song**: add the artist's name, or paste the song's link instead.
 - **"Discord didn't accept the login"**: `DISCORD_CLIENT_SECRET` is wrong or was reset; copy the current one from the Developer Portal.
 - **A role change doesn't apply on the website right away**: the website rechecks your roles at most every 30 seconds. (Changing which role is the DJ role applies at once.)
 - **Friends get "You need to be a DJ"**: the server has no DJ role yet, so only admins can control playback. A server admin opens the website → the server → **Settings** → DJ role, and picks a role (or `@everyone`).
@@ -234,6 +270,7 @@ src/
     paths.ts            Where library files live on disk
   web/
     server.ts           Starts the website: REST API, Socket.IO and the React app on one port
+    requests.ts         isLocalRequest(): whether a request came from this PC or through the public address
     routes/             REST API routes (under /api): auth.ts (login), guilds.ts (read), player.ts (controls),
                         playlists.ts (the Playlists tab), library.ts (the Library tab and uploads),
                         settings.ts (a server's settings), admin.ts (the owner's Admin page)
@@ -251,7 +288,7 @@ web/                    The React website (Vite)
   src/useGuildState.ts  Live state from the bot over Socket.IO
 lavalink/
   application.yml       Lavalink settings (sources, YouTube plugin)
-scripts/                Helpers for downloading Lavalink and yt-dlp, and starting Lavalink
+scripts/                Helpers for downloading Lavalink and yt-dlp, starting Lavalink, and Tailscale Funnel
 bin/                    yt-dlp (downloaded, not in git)
 data/bot.db             Settings, queues, history, playlists and the library's file list (SQLite, not in git)
 data/library/           Library files, one folder per server (not in git)

@@ -18,14 +18,26 @@ interface SessionData {
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 export function createSessionMiddleware(config: Config): RequestHandler {
-  return cookieSession({
+  const session = cookieSession({
     name: "session",
     keys: [config.SESSION_SECRET],
     maxAge: THIRTY_DAYS_MS,
     httpOnly: true, // page scripts can't read it
     sameSite: "lax", // other websites can't send it along with their requests
-    secure: config.PUBLIC_URL.startsWith("https://"), // https-only once the site is public (milestone 9)
   });
+
+  // The cookie is https-only whenever the request came over https (the public URL, through Tailscale Funnel), but
+  // not on http://localhost, where browsers would drop an https-only cookie. The cookie library refuses to send an
+  // https-only cookie over a connection it thinks is plain http, so this must follow the request, not PUBLIC_URL.
+  // Express knows a request came over https from Funnel's X-Forwarded-Proto header (see "trust proxy" in server.ts).
+  return (req, res, next) => {
+    session(req, res, (error?: unknown) => {
+      if (error) return next(error);
+      // Socket.IO's requests aren't Express requests (no `secure`), but they never change the cookie anyway.
+      if (req.sessionOptions) req.sessionOptions.secure = (req as { secure?: boolean }).secure === true;
+      next();
+    });
+  };
 }
 
 /** The session of a request that went through the session middleware (Express or Socket.IO). */

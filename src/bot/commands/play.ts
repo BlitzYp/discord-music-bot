@@ -10,7 +10,9 @@ export const play: Command = {
   data: new SlashCommandBuilder()
     .setName("play")
     .setDescription("Play a link or an audio file, or add it to the queue")
-    .addStringOption((o) => o.setName("query").setDescription("YouTube, SoundCloud, Bandcamp, Twitch or direct audio link"))
+    .addStringOption((o) =>
+      o.setName("query").setDescription("A song to search YouTube for, or a YouTube, SoundCloud, Bandcamp, Twitch or audio link"),
+    )
     .addAttachmentOption((o) =>
       o.setName("file").setDescription("An audio file to play. It's also saved to this server's library."),
     )
@@ -22,8 +24,8 @@ export const play: Command = {
     const input = interaction.options.getString("query");
     const hasFile = interaction.options.getAttachment("file") !== null;
     // Both options are optional (Discord can't require "one of the two"), so check here.
-    if (!input && !hasFile) throw new UserError("Give a link (`query`) or attach a file (`file`).");
-    if (input && hasFile) throw new UserError("Give either a link or a file, not both.");
+    if (!input && !hasFile) throw new UserError("Type a song or paste a link (`query`), or attach a file (`file`).");
+    if (input && hasFile) throw new UserError("Give either a song or link, or a file, not both.");
     if (hasFile) return playAttachment(interaction, ctx);
 
     // Loading a track can take longer than Discord's 3-second limit.

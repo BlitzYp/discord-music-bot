@@ -3,7 +3,7 @@ import * as api from "../api";
 import { isYoutubePlaylistLink } from "../shared";
 import { useAction } from "../useAction";
 
-/** "Add a song": paste a link, the same as /play in Discord. Only shown to DJs. */
+/** "Add a song": search for a song or paste a link, the same as /play in Discord. Only shown to DJs. */
 export function AddSong({ guildId }: { guildId: string }) {
   const linkId = useId();
   const [link, setLink] = useState("");
@@ -29,8 +29,8 @@ export function AddSong({ guildId }: { guildId: string }) {
       <form className="add-song" onSubmit={submit}>
         <input
           id={linkId}
-          type="url"
-          placeholder="Paste a song or playlist link…"
+          type="text"
+          placeholder="Search for a song, or paste a link…"
           value={link}
           onChange={(event) => setLink(event.target.value)}
           disabled={pending}
@@ -51,7 +51,7 @@ export function AddSong({ guildId }: { guildId: string }) {
         </label>
       )}
       <p className="muted hint">
-        {pending ? "Loading the song. This can take a few seconds…" : "Join a voice channel in Discord to start playing."}
+        {pending ? "Finding the song. This can take a few seconds…" : "Join a voice channel in Discord to start playing."}
       </p>
       {error && <p className="hint error-text">{error}</p>}
     </div>

@@ -34,9 +34,8 @@ The rule that holds it together: **commands and the website only call `PlayerMan
 1. **`events/interactionCreate.ts`** receives the command, looks it up in `commands/index.ts` and calls `play.execute()`. It also catches errors (see [Errors](#errors)).
 2. **`commands/play.ts`** calls `deferReply()` first, because Discord wants a response within 3 seconds and loading a link can take longer. Then it calls `players.play(guildId, { input, requestedBy, voiceChannelId, textChannelId })`.
 3. **`PlayerManager.play()`**:
-   1. `parseInput()` checks that the input is a link and labels it `youtube` or `url`.
-   2. `GuildPlayer.ensureConnected()` joins the requester's voice channel, unless the bot is already in one. (After a restart it also continues the interrupted song; see [Surviving a restart](#surviving-a-restart).)
-   3. `fetchMetadata()` loads the link through Lavalink to get the title, duration and thumbnail. `checkDurationLimit()` refuses songs longer than the server's limit.
+   1. `GuildPlayer.ensureConnected()` joins the requester's voice channel, unless the bot is already in one. (After a restart it also continues the interrupted song; see [Surviving a restart](#surviving-a-restart).)
+   2. `findSong()` (`resolvers/index.ts`) turns the input into a song. A link is labelled `youtube` or `url` by `parseInput()` and loaded by `fetchMetadata()` through Lavalink to get the title, duration and thumbnail. Anything else is searched for on YouTube (see [Text search](#text-search)). `checkDurationLimit()` refuses songs longer than the server's limit.
    4. `GuildPlayer.enqueue()` either plays it right away (if nothing was playing) or adds it to the end of the queue, unless the queue is at the server's limit.
 4. Back in `play.ts`, the reply says "Now playing ..." or "Queued at #3 ...".
 
@@ -75,6 +74,15 @@ A link can also *load* fine through Lavalink and then fail while *playing* (YouT
 3. If yt-dlp fails too, that error *is* shown, and the queue moves on.
 
 Downloads are shared and cached by URL (the last 20 songs), so looping a song doesn't download it again. The cache is emptied on every start, and the bot runs `yt-dlp -U` at startup to stay current.
+
+### Text search
+
+`/play`, "Add a song" and adding to a playlist accept a song's name as well as a link: `findSong()` treats anything that isn't an http(s) link as a search. `searchYoutube()` follows the owner's YouTube setting, like a YouTube link does:
+
+- **Lavalink** (`searchWithLavalink()` in `resolvers/lavalink.ts`): the YouTube plugin searches YouTube Music (`ytmsearch:`) first, because it finds the song itself (album audio) where YouTube finds the music video, often with an intro or a skit; then plain YouTube (`ytsearch:`) if that found nothing. Each takes about half a second.
+- **yt-dlp** (`searchYoutubeWithYtDlp()` in `resolvers/ytdlp.ts`): `yt-dlp --flat-playlist -J "ytsearch1:<query>"`, about 2 seconds.
+
+Only the first result is used, and what's queued is that result's **link**, not the search: searching again when the song's turn comes could find a different video. From there on it's a normal YouTube item.
 
 ### Why load the link again right before playing?
 
@@ -131,7 +139,16 @@ Changes from the website go through REST routes (`src/web/routes/player.ts`), ne
 
 `src/web/http.ts` has `route()`, a wrapper for async route handlers: an `HttpError` becomes its status (401, 403, 404…), a `NotAllowedError` 403 and any other `UserError` 400 with its message, anything else a 500 with the details logged to the console.
 
-The server still listens on `127.0.0.1` only. Making it public is milestone 9; logins and permissions are already in place for that.
+### The public address (Tailscale Funnel)
+
+The server listens on `127.0.0.1` only. `npm run funnel` (`scripts/funnel.mjs`) runs `tailscale funnel <WEB_PORT>` in the foreground: Tailscale answers `https://<pc>.<tailnet>.ts.net` and passes each request on to this port, from this computer, so the website is public exactly while that runs. Before starting, the script checks that Tailscale is logged in and warns if `PUBLIC_URL` doesn't match the PC's address. Four things make the server work behind it:
+
+- **https, as Funnel saw it.** Funnel connects over plain http but adds `X-Forwarded-Proto: https`. `app.set("trust proxy", "loopback")` (`server.ts`) lets Express believe that header from this computer only, so `req.secure` is true for public requests.
+- **The session cookie** (`session.ts`) is made https-only per request (`req.sessionOptions.secure = req.secure`), not from `PUBLIC_URL`: the cookie library refuses to send an https-only cookie on a request it thinks is http, and browsers would drop one on http://localhost.
+- **Two login addresses.** `isLocalRequest()` (`requests.ts`) tells this computer's requests (Host `localhost`, no `X-Forwarded-For`) from public ones. `redirectUriFor()` in `routes/auth.ts` sends logins started on this computer back to `http://localhost:<port>/api/auth/callback` and the rest to `OAUTH_REDIRECT_URI`, so logging in on the bot's PC works whether or not the public address is on. Both must be registered in the Developer Portal.
+- **The development website stays local.** With `npm run dev`, Vite's development server serves the page, and it can hand out other project files (source, even `data/bot.db`), so `frontend.ts` answers public requests with a 503 "run it with npm start" instead. The REST API and the socket work either way; `npm start` serves the built `web/dist/` to everyone.
+
+Logins and permission checks were built for this from milestone 5: every API route checks the logged-in user's level, and uploads need the custom header (see [The library](#the-library)).
 
 ## Playlists
 

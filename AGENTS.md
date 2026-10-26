@@ -5,6 +5,7 @@ A self-hosted Discord bot that plays audio in voice channels, controlled by slas
 **Status:** see the markers in the milestone list. "working" = the owner confirmed it in Discord or the browser; "written" = built and tested by an agent, not yet by the owner. Things to know:
 - YouTube playback needs the unreleased plugin build pinned in `lavalink/application.yml` (its comments explain why).
 - With no DJ role picked, only admins control playback; a server admin picks one (or @everyone) on the website's Settings tab.
+- The public website is the build (`npm start`); `npm run dev` only serves the page to this PC. The owner logs in to Tailscale and switches Funnel on themselves.
 - `npm run dev` restarts on every save in `src/`. Since milestone 6 the queue survives that (the bot rejoins and continues), but warn the owner before editing `src/` while they're listening.
 - Extras the owner asked for along the way: `/filter` effects (working, also on the website), seeking (`/seek` and the website's progress bar), and a "Recently played" list.
 
@@ -26,7 +27,7 @@ Build them in order. Each milestone works end to end in Discord before the next 
 6. **Settings + persistence:** SQLite, per-server settings page (DJ role!), owner admin panel (YouTube mode, limits, status), queues and history restored after restart. *(written)*
 7. **Playlists:** per-server saved playlists that members add to and DJs play (replacing the queue), importing YouTube playlists, saving the queue as a playlist; `/playlist` and the website's Playlists tab. See "Playlists" in docs/design.md. *(working)*
 8. **Library:** `/play file:`, website uploads, ffprobe/ffmpeg pipeline, library browser; `/library` and the website's Library tab. See "Local audio files" in docs/design.md. *(working)*
-9. **Polish:** text search, Cloudflare Tunnel (public URL), run as a background service (pm2 or NSSM).
+9. **Polish:** text search, a public URL through Tailscale Funnel (`npm run funnel`; the owner picked it over Cloudflare Tunnel). The owner chose to start everything by hand, so there's no background service. See "Text search" and "Public URL" in docs/design.md. *(working)*
 
 ## Architecture rules
 

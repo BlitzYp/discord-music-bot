@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import type { NewPlaylistItem, PlaylistStore } from "../db/playlistStore.js";
 import { NotAllowedError, UserError } from "../player/errors.js";
 import type { PlayerManager, VoiceRequest } from "../player/PlayerManager.js";
-import { fetchMetadata, listPlaylist, type PlaylistEntry, parseInput } from "../player/resolvers/index.js";
+import { findSong, listPlaylist, type PlaylistEntry, parseInput } from "../player/resolvers/index.js";
 import {
   type AddManyResult,
   type AddedBy,
@@ -153,14 +153,16 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> {
   // Songs
   // ---------------------------------------------------------------------------------------------
 
-  /** Adds one link to the end of a playlist (anyone in the server may). Returns the new song. */
+  /**
+   * Adds one link, or the best YouTube match for a search, to the end of a playlist (anyone in the server may).
+   * Returns the new song.
+   */
   async addSong(guildId: string, playlistId: number, input: string, addedBy: Requester): Promise<PlaylistItem> {
-    const source = parseInput(input);
     this.checkRoom(this.get(guildId, playlistId));
 
     // Read the title and length now, so the playlist can show them. The link is loaded again when it plays.
     const youtubeMode = this.players.settings.global().youtubeMode;
-    const { meta } = await fetchMetadata(this.players.lavalink, source, addedBy, youtubeMode);
+    const { source, meta } = await findSong(this.players.lavalink, input, addedBy, youtubeMode);
 
     // Loading took a moment: make sure the playlist still exists and still has room.
     const playlist = this.get(guildId, playlistId);

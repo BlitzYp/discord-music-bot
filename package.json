@@ -9,6 +9,7 @@
     "build": "tsc && vite build --config web/vite.config.ts",
     "typecheck": "tsc --noEmit && tsc -p web --noEmit",
     "lavalink": "node scripts/lavalink.mjs",
+    "funnel": "node scripts/funnel.mjs",
     "setup:lavalink": "node scripts/download-lavalink.mjs",
     "setup:ytdlp": "node scripts/download-ytdlp.mjs"
   },

@@ -48,7 +48,9 @@ export const playlist: Command = {
         .setName("add")
         .setDescription("Add a song to a playlist")
         .addStringOption(nameOption)
-        .addStringOption((o) => o.setName("link").setDescription("A YouTube, SoundCloud or other link").setRequired(true)),
+        .addStringOption((o) =>
+          o.setName("link").setDescription("A song to search YouTube for, or a YouTube, SoundCloud or other link").setRequired(true),
+        ),
     )
     .addSubcommand((s) =>
       s

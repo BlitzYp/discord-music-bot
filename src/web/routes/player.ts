@@ -35,7 +35,7 @@ export function playerRoutes({ client, players, library, settings }: WebContext)
 
   // ---- The queue ----
 
-  // { input } adds one link. With `wholePlaylist: true`, a YouTube playlist link queues every song of the playlist.
+  // { input } adds one link, or the best YouTube match for a search. With `wholePlaylist: true`, a YouTube playlist link queues every song of the playlist.
   // { fileId } adds a file from the server's library.
   djRoute("post", "/guilds/:id/queue", async ({ guild, user }, req) => {
     const voice = {
@@ -51,7 +51,7 @@ export function playerRoutes({ client, players, library, settings }: WebContext)
     }
 
     const input = req.body?.input;
-    if (typeof input !== "string" || input.trim() === "") throw new UserError("Paste a link to add.");
+    if (typeof input !== "string" || input.trim() === "") throw new UserError("Type a song to search for, or paste a link.");
     const request = { input, ...voice };
     if (req.body?.wholePlaylist === true) {
       if (!isYoutubePlaylistLink(input)) throw new UserError(`That isn't a YouTube playlist link (one with "list=" in it).`);

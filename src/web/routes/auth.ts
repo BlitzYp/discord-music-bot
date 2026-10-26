@@ -1,9 +1,10 @@
 import { randomBytes } from "node:crypto";
-import { Router } from "express";
+import { type Request, Router } from "express";
 import type { Config } from "../../config.js";
 import type { CurrentUser, SessionUser } from "../../shared/types.js";
 import { isOwner } from "../access.js";
 import { HttpError, route } from "../http.js";
+import { isLocalRequest } from "../requests.js";
 import { sessionUserOf } from "../session.js";
 
 const DISCORD_API = "https://discord.com/api/v10";
@@ -14,6 +15,10 @@ const DISCORD_API = "https://discord.com/api/v10";
  * 2. Discord sends the browser back to GET /auth/callback with a one-time `code` and the same `state`.
  * 3. The bot swaps the code for an access token, asks Discord who the user is, and stores that in the cookie.
  * Only the `identify` scope is requested: the bot looks up servers and roles itself.
+ *
+ * Discord sends the browser back to the address the login started from: http://localhost on the bot's own
+ * computer, or the public URL (OAUTH_REDIRECT_URI). Both must be listed under OAuth2 → Redirects in the Developer
+ * Portal. That way logging in on this computer keeps working while the public URL is off.
  */
 export function authRoutes(config: Config): Router {
   const router = Router();
@@ -23,7 +28,7 @@ export function authRoutes(config: Config): Router {
     req.session!.oauthState = state;
     const params = new URLSearchParams({
       client_id: config.DISCORD_CLIENT_ID,
-      redirect_uri: config.OAUTH_REDIRECT_URI,
+      redirect_uri: redirectUriFor(req, config),
       response_type: "code",
       scope: "identify",
       state,
@@ -46,7 +51,7 @@ export function authRoutes(config: Config): Router {
         throw new HttpError(400, "That login link is invalid or expired. Try logging in again.");
       }
 
-      const accessToken = await exchangeCodeForToken(config, code);
+      const accessToken = await exchangeCodeForToken(config, code, redirectUriFor(req, config));
       const user = await fetchDiscordUser(accessToken);
       req.session = { user }; // replaces the old session, dropping oauthState
       res.redirect("/");
@@ -71,7 +76,15 @@ export function authRoutes(config: Config): Router {
   return router;
 }
 
-async function exchangeCodeForToken(config: Config, code: string): Promise<string> {
+/**
+ * Where Discord sends the browser back to after the login: this computer's address for logins started on this
+ * computer, the public one otherwise. The code exchange must name the same address the login did.
+ */
+function redirectUriFor(req: Request, config: Config): string {
+  return isLocalRequest(req) ? `http://localhost:${config.WEB_PORT}/api/auth/callback` : config.OAUTH_REDIRECT_URI;
+}
+
+async function exchangeCodeForToken(config: Config, code: string, redirectUri: string): Promise<string> {
   const res = await fetch(`${DISCORD_API}/oauth2/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -80,7 +93,7 @@ async function exchangeCodeForToken(config: Config, code: string): Promise<strin
       client_secret: config.DISCORD_CLIENT_SECRET,
       grant_type: "authorization_code",
       code,
-      redirect_uri: config.OAUTH_REDIRECT_URI,
+      redirect_uri: redirectUri,
     }),
   });
   if (!res.ok) {

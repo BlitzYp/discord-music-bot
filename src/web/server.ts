@@ -32,11 +32,14 @@ export interface WebContext {
  * Starts the website: the REST API under /api, live updates over Socket.IO, and the React frontend,
  * all on one port.
  *
- * It listens on 127.0.0.1 only, so it's reachable from this computer but not from the network. Making it
- * public (Cloudflare Tunnel) is milestone 9; logins and permission checks are already in place for that.
+ * It listens on 127.0.0.1 only, so the network can't reach it directly. The public URL comes from Tailscale Funnel
+ * (`npm run funnel`), which runs on this computer and passes requests on to this port.
  */
 export async function startWebServer(context: WebContext): Promise<void> {
   const app = express();
+  // Requests from this computer may say they arrived over https (X-Forwarded-Proto): Tailscale Funnel does, for the
+  // public URL. Only this computer is trusted to say so; nobody else can connect to 127.0.0.1 anyway.
+  app.set("trust proxy", "loopback");
   const httpServer = createServer(app);
   const session = createSessionMiddleware(context.config);
 

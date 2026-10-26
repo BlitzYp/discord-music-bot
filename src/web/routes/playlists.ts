@@ -8,6 +8,8 @@ import type { WebContext } from "../server.js";
 
 const name = z.string().trim().min(1, "give the playlist a name").max(MAX_PLAYLIST_NAME_LENGTH);
 const link = z.string().trim().min(1, "paste a link");
+/** A song to add: a link, or words to search YouTube for. */
+const song = z.string().trim().min(1, "type a song or paste a link");
 
 /**
  * POST /playlists: a new empty playlist ({ name }), or one imported from a YouTube playlist ({ importUrl }, with
@@ -17,9 +19,12 @@ const createBody = z
   .object({ name: name.optional(), importUrl: link.optional() })
   .strict()
   .refine((body) => body.name !== undefined || body.importUrl !== undefined, "Give the playlist a name.");
-/** POST /playlists/:playlistId/items: one link ({ input }), or every song of a YouTube playlist ({ importUrl }, DJs). */
+/**
+ * POST /playlists/:playlistId/items: one song ({ input }: a link or a search), or every song of a YouTube playlist
+ * ({ importUrl }, DJs).
+ */
 const addItemsBody = z
-  .object({ input: link.optional(), importUrl: link.optional() })
+  .object({ input: song.optional(), importUrl: link.optional() })
   .strict()
   .refine((body) => (body.input === undefined) !== (body.importUrl === undefined), 'Send either "input" or "importUrl".');
 const renameBody = z.object({ name }).strict();

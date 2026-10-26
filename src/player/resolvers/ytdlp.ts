@@ -74,6 +74,17 @@ export async function fetchPlaylist(url: string, limit: number): Promise<YtDlpPl
 }
 
 /**
+ * Searches YouTube with yt-dlp and returns the best match, or null if nothing was found. The backup for when
+ * Lavalink's YouTube plugin can't search. `--flat-playlist` reads only the results page, which takes about 2 s.
+ */
+export async function searchYoutubeWithYtDlp(query: string): Promise<YtDlpPlaylistEntry | null> {
+  // "ytsearch1:" is yt-dlp's own syntax for "the first YouTube result for". execFile passes the query as one
+  // argument without a shell, so nothing in it can be read as another option or command.
+  const json = await runYtDlp(["--flat-playlist", "-J", `ytsearch1:${query}`]);
+  return (JSON.parse(json) as YtDlpPlaylist).entries?.[0] ?? null;
+}
+
+/**
  * Downloads a link's audio and returns the file's path. Concurrent and repeated requests for the same
  * link share one download.
  */

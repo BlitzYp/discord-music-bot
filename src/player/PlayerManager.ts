@@ -10,7 +10,7 @@ import { type AddManyResult, MAX_PLAYLIST_SONGS, type PlaylistPlayMode } from ".
 import type { AudioFilter, LoopMode, PlayerSnapshot, QueueItem, Requester } from "../shared/types.js";
 import { UserError } from "./errors.js";
 import { GuildPlayer } from "./GuildPlayer.js";
-import { fetchMetadata, listPlaylist, parseInput, type TrackMetadata } from "./resolvers/index.js";
+import { findSong, listPlaylist, parseInput, type TrackMetadata } from "./resolvers/index.js";
 
 /**
  * Events PlayerManager emits whenever something changes. The bot posts "error" in Discord;
@@ -27,7 +27,7 @@ export interface PlayerManagerEvents {
 }
 
 export interface PlayRequest {
-  /** What the user typed: for now, a link. */
+  /** What the user typed: a link, or words to search YouTube for. */
   input: string;
   requestedBy: Requester;
   /** The voice channel the requester is in. Used to join voice if the bot isn't connected yet. */
@@ -71,11 +71,10 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
   }
 
   /**
-   * Adds a link to the server's queue, joining the requester's voice channel first if needed.
-   * Returns the new item and its position (0 = playing now).
+   * Adds a link, or the best YouTube match for a search, to the server's queue, joining the requester's voice
+   * channel first if needed. Returns the new item and its position (0 = playing now).
    */
   async play(guildId: string, request: PlayRequest): Promise<{ item: QueueItem; position: number }> {
-    const source = parseInput(request.input);
     const player = this.getOrCreatePlayer(guildId);
 
     // Join voice before loading the link, so "join a voice channel first" comes back immediately.
@@ -83,7 +82,7 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
     await player.run(() => player.ensureConnected(request.voiceChannelId, request.textChannelId));
 
     const youtubeMode = this.settings.global().youtubeMode;
-    const { meta, track } = await fetchMetadata(this.lavalink, source, request.requestedBy, youtubeMode);
+    const { source, meta, track } = await findSong(this.lavalink, request.input, request.requestedBy, youtubeMode);
     this.checkDurationLimit(guildId, meta);
     const item: QueueItem = { id: randomUUID(), source, ...meta, requestedBy: request.requestedBy };
 
