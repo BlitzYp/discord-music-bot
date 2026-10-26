@@ -73,6 +73,9 @@ export function playerRoutes({ client, players, library, settings }: WebContext)
     return players.move(guild.id, req.params.itemId as string, position);
   });
 
+  // Plays a queued item right away; the current track is skipped.
+  djRoute("post", "/guilds/:id/queue/:itemId/play", ({ guild }, req) => players.playNow(guild.id, req.params.itemId as string));
+
   djRoute("post", "/guilds/:id/queue/shuffle", ({ guild }) => players.shuffle(guild.id));
   djRoute("delete", "/guilds/:id/queue", ({ guild }) => players.clearQueue(guild.id));
   djRoute("delete", "/guilds/:id/history", ({ guild }) => players.clearHistory(guild.id));

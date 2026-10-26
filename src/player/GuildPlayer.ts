@@ -259,6 +259,19 @@ export class GuildPlayer {
     return skipped;
   }
 
+  /**
+   * Plays a queued item right away: it moves to the front of the queue and the current track is skipped, the
+   * same as /skip (into "Recently played", and to the end of the queue in "queue" loop mode). Returns the item.
+   */
+  async playNow(itemId: string): Promise<QueueItem> {
+    const index = this.findQueueIndex(itemId);
+    const [item] = this.queue.splice(index, 1);
+    this.queue.unshift(item!);
+    if (this.current) await this.skip();
+    else await this.playNext(); // nothing playing (shouldn't happen with a queue, but then just start it)
+    return item!;
+  }
+
   /** Clears the queue, stops playback and leaves the voice channel. */
   async stop(): Promise<void> {
     this.reset();

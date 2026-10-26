@@ -212,6 +212,12 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
     return player.run(async () => player.move(itemId, toPosition));
   }
 
+  /** Skips to a queued item: it starts playing now, and the current track is skipped. Returns the item. */
+  async playNow(guildId: string, itemId: string): Promise<QueueItem> {
+    const player = this.requirePlayer(guildId);
+    return player.run(() => player.playNow(itemId));
+  }
+
   async shuffle(guildId: string): Promise<void> {
     const player = this.requirePlayer(guildId);
     await player.run(async () => player.shuffle());

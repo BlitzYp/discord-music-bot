@@ -52,7 +52,7 @@ Lavalink tells the bot when a track ends, and why. `PlayerManager.listenToLavali
 
 `playNext()` takes the next item off the queue and **loads its link again** right before playing it (see below). If that fails, it reports the error in the channel and tries the item after it. When the queue is empty the bot goes quiet but stays in the voice channel.
 
-`/skip` drops the current item, or, in `queue` loop mode, moves it to the end of the queue. Every new track starts unpaused, because Lavalink would otherwise stay paused across a skip.
+`/skip` drops the current item, or, in `queue` loop mode, moves it to the end of the queue. `/playnow` (and **▶** on the website) is `GuildPlayer.playNow()`: it moves the chosen item to the front of the queue and then skips, so it follows the same rules. Every new track starts unpaused, because Lavalink would otherwise stay paused across a skip.
 
 Tracks that played to the end or were skipped go into `GuildPlayer.history` (newest first, the last 20; a track on repeat is listed once). Tracks that failed don't. The website shows it as "Recently played". It survives `/stop`, and it's saved with the queue, so it survives restarts too.
 
@@ -299,7 +299,7 @@ On Ctrl+C, `shutdown()` in `src/index.ts` calls `players.stopSaving()` *before* 
 2. **`/resume`** (or the website's Resume button), in the requester's voice channel.
 3. **`/play`**, which continues the interrupted track and then queues the new one.
 
-While interrupted, `/skip` moves to the next song without playing it (it waits to be continued from its start), `/stop` clears everything, and controls that need the voice connection (pause, seek, volume, effects) answer "Playback stopped when the bot restarted. Use /resume to continue."
+While interrupted, `/skip` (and `/playnow`) moves to the next song without playing it (it waits to be continued from its start), `/stop` clears everything, and controls that need the voice connection (pause, seek, volume, effects) answer "Playback stopped when the bot restarted. Use /resume to continue."
 
 Saved items are links, loaded again when they play like any queued item, so links that expired during the downtime don't matter.
 

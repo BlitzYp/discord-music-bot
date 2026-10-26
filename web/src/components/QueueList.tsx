@@ -9,7 +9,7 @@ import { TrackArtwork } from "./TrackArtwork";
 interface Props {
   guildId: string;
   queue: QueueItem[];
-  /** Whether the user is a DJ (shows the move/remove buttons, Shuffle and Clear, and allows dragging). */
+  /** Whether the user is a DJ (shows the play now/move/remove buttons, Shuffle and Clear, and allows dragging). */
   canControl: boolean;
   /** The add-song form lives with the queue; members don't get one. */
   children?: ReactNode;
@@ -74,6 +74,15 @@ export function QueueList({ guildId, queue, canControl, children }: Props) {
 
               {canControl && (
                 <span className="row-actions">
+                  <button
+                    type="button"
+                    title="Play now (skips the current song)"
+                    aria-label={`Play ${item.title} now`}
+                    disabled={pending}
+                    onClick={() => run(() => api.playNowFromQueue(guildId, item.id))}
+                  >
+                    ▶
+                  </button>
                   <button
                     type="button"
                     title="Move up"

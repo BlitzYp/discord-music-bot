@@ -83,6 +83,9 @@ export const removeFromQueue = (guildId: string, itemId: string): State =>
 /** `position` is 1-based, like the numbers in the list: 1 = play next. */
 export const moveInQueue = (guildId: string, itemId: string, position: number): State =>
   request("PATCH", `/guilds/${guildId}/queue/${itemId}`, { position });
+/** Plays a queued item right away; the current track is skipped. */
+export const playNowFromQueue = (guildId: string, itemId: string): State =>
+  request("POST", `/guilds/${guildId}/queue/${itemId}/play`);
 export const shuffleQueue = (guildId: string): State => request("POST", `/guilds/${guildId}/queue/shuffle`);
 /** Empties the queue; the current track keeps playing. */
 export const clearQueue = (guildId: string): State => request("DELETE", `/guilds/${guildId}/queue`);
