@@ -42,7 +42,7 @@ Browser ── HTTPS (CF Tunnel) ──▶ Node process (TypeScript)
 
 Slash commands and web routes are thin wrappers over the same `PlayerManager` methods. Every state change emits an event that the web layer forwards to that server's Socket.IO room. Neither UI keeps its own copy of the state, so Discord and the website always agree.
 
-`src/playlists/` (milestone 7) holds `PlaylistManager`. Planned folders that don't exist yet: `src/library/` (upload pipeline, ffprobe/ffmpeg helpers) and `src/player/resolvers/file.ts`. `data/` (gitignored) holds the SQLite database `bot.db`, the yt-dlp cache and, from milestone 8, `library/`. Startup order in `src/index.ts`: config → db → Lavalink → bot → web.
+`src/playlists/` (milestone 7) holds `PlaylistManager`; `src/library/` (milestone 8) holds `LibraryManager` and the ffprobe/ffmpeg helpers. Library files are resolved in `src/player/resolvers/index.ts` (no separate `file.ts`: it's a few lines). `data/` (gitignored) holds the SQLite database `bot.db`, the yt-dlp cache and `library/`. Startup order in `src/index.ts`: config → db → Lavalink → bot → web.
 
 ## Playback
 
@@ -69,17 +69,19 @@ Notes:
 - YouTube breaks downloaders regularly; that is why `auto` mode exists. The fix is usually updating yt-dlp and the YouTube plugin version in `lavalink/application.yml`.
 - Downloading from YouTube breaks its terms of service. That's acceptable for private use, so the bot stays private (no public bot listings).
 
-### Local audio files (milestone 8)
+### Local audio files (built in milestone 8)
 The fallback for when the big services break: people can play files they already have.
-- **From Discord:** `/play file:<attachment>` uses an attachment option on the slash command, so no message-content intent is needed. Download the file into the library straight away, because Discord CDN URLs expire after about 24 hours.
-- **From the website:** multipart upload (`multer`), for DJs only.
-- **Pipeline:** save to temp → run `ffprobe` to check it is really audio and read the duration and tags → if Lavalink can't decode it, transcode with ffmpeg to Opus/OGG → move to `data/library/<guildId>/<fileId>.<ext>` → insert a DB row.
-- **Playback:** through Lavalink's local source (`sources.local: true`; Lavalink must be on the same machine). Alternative: serve the files over an internal Express URL.
-- **Formats Lavalink decodes:** MP3, FLAC, WAV, OGG (Opus/Vorbis/FLAC), M4A/MP4 (AAC), WebM/Matroska (Opus/Vorbis).
-- **Limits:** maximum file size (global), storage quota per server (global), who can upload (per server).
-- Store files under generated IDs; the uploaded file name is display data only, never part of a path.
-- The library is per server; it can be browsed, searched and re-queued from the website and with `/library`.
+- **From Discord:** `/play file:<attachment>` (save and play) and `/library upload <attachment>` (save only) use an attachment option on the slash command, so no message-content intent is needed. The file is downloaded into the library straight away, because Discord CDN URLs expire after about 24 hours.
+- **From the website:** multipart upload (`multer`), following the server's `uploadPermission`. Uploads aren't JSON, so they must carry the header `X-Requested-With: music-bot` instead, which other websites can't add without a CORS check. The page uploads with `XMLHttpRequest` to show progress, one file at a time.
+- **Pipeline:** save to `data/library/.incoming/` → `ffprobe` checks it is really audio and reads the duration and tags → if Lavalink can't decode it (or it has a video stream), ffmpeg converts it to Opus/OGG at 160 kbit/s → move to `data/library/<guildId>/<fileId>.<ext>` → insert a DB row. The incoming folder is emptied on every start.
+- **Playback:** through Lavalink's local source (`sources.local: true`; Lavalink must be on the same machine). The queue stores `{ kind: "file", fileId }`; the path is looked up when the item plays.
+- **Formats kept as they are:** MP3, FLAC, 16-bit PCM WAV, OGG (Opus/Vorbis/FLAC), M4A (AAC, no video), WebM/Matroska (Opus/Vorbis, no video). Everything else ffmpeg reads is converted. Tested 2026-10-26: AIFF and WMA don't load in Lavalink, and load after converting.
+- **Limits:** maximum file size (`maxUploadMb`, global, default 100 MB), storage quota per server (`guildQuotaMb`, global, default 2000 MB), who can upload (`uploadPermission`, per server, default DJs). Deleting needs a DJ; looking is for everyone.
+- Files are stored under generated IDs; the uploaded file name is display data only, never part of a path.
+- The library is per server; it can be browsed, searched and re-queued from the website and with `/library list|play|upload|delete`.
+- Deleting removes the row, then the file. Windows keeps a playing file locked, so that file is deleted on the next start instead (startup deletes files with no row).
 - Free Discord users can upload about 10 MB, so larger files go through the website.
+- Possible later: renaming a file's title on the website; spotting duplicate uploads.
 
 ## Auth & permissions (built in milestone 5)
 
@@ -106,7 +108,7 @@ The types, defaults and allowed ranges live in [src/shared/settings.ts](../src/s
 - `youtubeMode`: `auto` | `lavalink` | `ytdlp`
 - `ytdlpAutoUpdate`: on/off, plus an "Update now" button
 - Status view: bot uptime and servers; Lavalink connection, version, YouTube plugin version, players and memory; yt-dlp version
-- Milestone 8 adds `maxUploadMb` and `guildQuotaMb` (left out until uploads exist, so the page has no settings that do nothing).
+- `maxUploadMb` and `guildQuotaMb` (milestone 8): the largest upload, and each server's library space. The status view also shows ffmpeg's version.
 
 **Per server (server admins, Settings tab):**
 - `djRoleId` (unset = only admins can control playback; @everyone = every member)
@@ -115,7 +117,7 @@ The types, defaults and allowed ranges live in [src/shared/settings.ts](../src/s
 - `requireSameVoiceChannel`: while the bot is in a voice channel, DJs must be in it to control playback (default off; admins are exempt)
 - `leaveWhenEmptyAfterSec` (default 60; 0 = never leave)
 - `announceChannelId` (optional "Now playing" messages; a song repeating or retried with yt-dlp isn't announced again)
-- Milestone 8 adds `uploadPermission`: `dj` | `admin` | `off`.
+- `uploadPermission` (milestone 8): `dj` | `admin` | `off`. "off" refuses everyone, admins too; they can change the setting.
 
 ## Keys & secrets
 
@@ -149,7 +151,7 @@ Possibly needed later:
 - `queue_items(guild_id, position, item_json)`: one row per `QueueItem`; position 1 plays next
 - `history_items(guild_id, position, item_json)`: "Recently played"; position 1 is the newest (20 per server)
 - `playlists`, `playlist_items` (migration 2, milestone 7): see "Playlists".
-- Milestone 8 adds `library_files(id, guild_id, uploaded_by, original_name, path, mime, duration_ms, size_bytes, created_at)`.
+- `library_files(id, guild_id, file_name, original_name, title, artist, duration_ms, size_bytes, uploaded_by_id, uploaded_by_name, created_at)` (migration 3, milestone 8). `file_name` is `<id>.<extension>` inside `data/library/<guild_id>/`; a full path isn't stored, so the data folder can move. Migration 3 also adds `guild_settings.upload_permission`.
 
 ### Queue persistence (built in milestone 6)
 - The working copy stays in memory (`Map<guildId, GuildPlayer>`). Every change to the track or the queue rewrites that server's saved state in one transaction; every status change (including Lavalink's once-a-second position update) updates `player_state`. A crash loses about a second.
@@ -199,7 +201,7 @@ POST   /guilds/:id/playlists/from-queue               (dj) { name }
 
 ## Real-time (Socket.IO, built in milestone 4)
 - The client sends `guild:watch <id>` and joins the room `guild:<id>`. From milestone 5, the server first checks that the logged-in user is a member of that server.
-- Server → client: `state` (full snapshot on join), `queue:update`, `track:start`, `track:end`, `player:update` (position, paused, volume, loop mode, filter; about once per second while playing), `error`, `playlists:update` (milestone 7). The types live in `src/shared/types.ts`.
+- Server → client: `state` (full snapshot on join), `queue:update`, `track:start`, `track:end`, `player:update` (position, paused, volume, loop mode, filter; about once per second while playing), `error`, `playlists:update` (milestone 7), `library:update` (milestone 8). The types live in `src/shared/types.ts`.
 - **Changes go over REST; sockets only push updates.** This keeps authorization and validation in one place.
 - The website shows when Lavalink is down. `lavalink-client` reconnects by itself, but playback fails until it does.
 
@@ -210,7 +212,7 @@ POST   /guilds/:id/playlists/from-queue               (dj) { name }
 The Player tab puts the current song in a full-width section at the top: artwork and title, then progress and playback controls. Audio effects expand below the controls, with the active effect shown in the summary. Adding a song belongs with the queue: the form sits under **Up next**, outside a height-limited, keyboard-scrollable song list. **Recently played** sits beside the queue on wide screens and follows it on smaller screens, with a **+** action to queue a song again. Neutral surfaces, text-style secondary actions, list dividers and underlined navigation follow the system's light/dark theme. Artwork has a consistent fallback when an image is unavailable. On phones, row actions wrap below song details; move buttons remain available where dragging is unsupported. This layout uses the existing API and permission checks.
 
 ### Slash commands
-`/play <query|url> [playlist]` · `/play file:<attachment>` · `/playlist …` (see "Playlists") · `/skip` · `/stop` · `/pause` · `/resume` · `/queue` · `/nowplaying` · `/remove <pos>` · `/move <from> <to>` · `/shuffle` · `/loop off|track|queue` · `/volume <0-150>` · `/filter <effect>` · `/seek <time>` · `/library` · `/dashboard` (link to the website)
+`/play <query|url> [playlist]` · `/play file:<attachment>` · `/playlist …` (see "Playlists") · `/skip` · `/stop` · `/pause` · `/resume` · `/queue` · `/nowplaying` · `/remove <pos>` · `/move <from> <to>` · `/shuffle` · `/loop off|track|queue` · `/volume <0-150>` · `/filter <effect>` · `/seek <time>` · `/library list|play|upload|delete` · `/dashboard` (link to the website)
 
 `/filter` (added alongside milestone 3, at the owner's request) uses Lavalink's built-in filters: nightcore, vaporwave, bassboost, 8d, karaoke, soft, or off. One effect at a time, kept on the player until changed. The website offers the same list (`AUDIO_FILTERS` in `src/shared/filters.ts`) through `POST /guilds/:id/player/filter { filter }`, which needs DJ permission from milestone 5.
 
@@ -223,7 +225,7 @@ POST   /auth/logout
 GET    /me
 GET    /guilds                     servers the user shares with the bot, with their level
 GET    /guilds/:id/state           (member)
-POST   /guilds/:id/queue           (dj) { input: string, wholePlaylist?: true }   ({ fileId } in milestone 8)
+POST   /guilds/:id/queue           (dj) { input: string, wholePlaylist?: true } | { fileId: string }
 DELETE /guilds/:id/queue/:itemId   (dj)
 PATCH  /guilds/:id/queue/:itemId   (dj) { position: number }    1 = play next
 POST   /guilds/:id/queue/shuffle   (dj)
@@ -246,9 +248,9 @@ POST   /admin/ytdlp/update         (owner) update yt-dlp now
 ```
 Built in milestone 7: the playlist routes listed under "Playlists".
 
-Planned:
+Built in milestone 8:
 ```
-GET    /guilds/:id/library
-POST   /guilds/:id/library         (multipart upload)
-DELETE /guilds/:id/library/:fileId
+GET    /guilds/:id/library          (member) the files, newest first, plus space used, limits and the upload setting
+POST   /guilds/:id/library          (uploadPermission) multipart, one file in the field "file", header X-Requested-With: music-bot
+DELETE /guilds/:id/library/:fileId  (dj)
 ```

@@ -37,13 +37,22 @@ export function route(handler: (req: Request, res: Response) => Promise<void>): 
 }
 
 /**
+ * The header the website sends with file uploads. Uploads can't be JSON, and a plain HTML form on another website
+ * could send one, but no other website can add a custom header without passing a CORS check first.
+ */
+export const UPLOAD_HEADER = "X-Requested-With";
+export const UPLOAD_HEADER_VALUE = "music-bot";
+
+/**
  * Refuses changes (POST, PATCH, DELETE) that aren't sent as JSON. Browsers only let a page send JSON to another
  * site after a CORS check, which this server never passes, so other websites can't make changes through a
  * logged-in user's browser. (The session cookie's `sameSite: "lax"` already blocks that; this is a second lock.)
+ * File uploads are the one exception: they're multipart, and need UPLOAD_HEADER instead.
  */
 export const requireJsonForChanges: RequestHandler = (req, res, next) => {
   const isChange = req.method === "POST" || req.method === "PATCH" || req.method === "DELETE";
-  if (isChange && !req.is("application/json")) {
+  const isUpload = req.is("multipart/form-data") && req.get(UPLOAD_HEADER) === UPLOAD_HEADER_VALUE;
+  if (isChange && !isUpload && !req.is("application/json")) {
     res.status(415).json({ error: "Send the request body as JSON." });
     return;
   }

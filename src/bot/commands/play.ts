@@ -1,41 +1,81 @@
 import { SlashCommandBuilder } from "discord.js";
+import { levelOf } from "../../permissions.js";
+import { UserError } from "../../player/errors.js";
 import { isYoutubePlaylistLink } from "../../shared/playlists.js";
 import { describeAddMany, escapeMarkdown, formatItem } from "../format.js";
-import type { Command } from "./types.js";
+import type { Command, CommandContext, GuildCommandInteraction } from "./types.js";
 
 export const play: Command = {
   permission: "dj",
   data: new SlashCommandBuilder()
     .setName("play")
-    .setDescription("Play a link or add it to the queue")
-    .addStringOption((o) =>
-      o.setName("query").setDescription("YouTube, SoundCloud, Bandcamp, Twitch or direct audio link").setRequired(true),
+    .setDescription("Play a link or an audio file, or add it to the queue")
+    .addStringOption((o) => o.setName("query").setDescription("YouTube, SoundCloud, Bandcamp, Twitch or direct audio link"))
+    .addAttachmentOption((o) =>
+      o.setName("file").setDescription("An audio file to play. It's also saved to this server's library."),
     )
     .addBooleanOption((o) =>
       o.setName("playlist").setDescription("For a YouTube playlist link: queue every song of the playlist (up to 500)"),
     ),
 
-  async execute(interaction, { players }) {
+  async execute(interaction, ctx) {
+    const input = interaction.options.getString("query");
+    const hasFile = interaction.options.getAttachment("file") !== null;
+    // Both options are optional (Discord can't require "one of the two"), so check here.
+    if (!input && !hasFile) throw new UserError("Give a link (`query`) or attach a file (`file`).");
+    if (input && hasFile) throw new UserError("Give either a link or a file, not both.");
+    if (hasFile) return playAttachment(interaction, ctx);
+
     // Loading a track can take longer than Discord's 3-second limit.
     await interaction.deferReply();
-    const input = interaction.options.getString("query", true);
     const request = {
-      input,
-      requestedBy: { id: interaction.user.id, name: interaction.member.displayName, via: "discord" as const },
-      voiceChannelId: interaction.guild.voiceStates.cache.get(interaction.user.id)?.channelId ?? null,
-      textChannelId: interaction.channelId,
+      input: input!,
+      requestedBy: requesterOf(interaction),
+      ...voiceOf(interaction),
     };
 
-    const isPlaylistLink = isYoutubePlaylistLink(input);
+    const isPlaylistLink = isYoutubePlaylistLink(request.input);
     if (isPlaylistLink && interaction.options.getBoolean("playlist")) {
-      const { title, result } = await players.playPlaylistLink(interaction.guildId, request);
+      const { title, result } = await ctx.players.playPlaylistLink(interaction.guildId, request);
       await interaction.editReply(`From **${escapeMarkdown(title)}**: ${describeAddMany(result)}`);
       return;
     }
 
-    const { item, position } = await players.play(interaction.guildId, request);
+    const { item, position } = await ctx.players.play(interaction.guildId, request);
     let reply = position === 0 ? `Now playing ${formatItem(item)}` : `Queued at #${position}: ${formatItem(item)}`;
     if (isPlaylistLink) reply += "\nThat link is from a playlist. To queue all of it, use /play again with `playlist: True`.";
     await interaction.editReply(reply);
   },
 };
+
+/**
+ * `/play file:`: saves the attachment to the server's library (Discord's links to attachments expire after about a
+ * day), then queues it. Saving needs upload permission (the server's setting), on top of being a DJ.
+ */
+async function playAttachment(interaction: GuildCommandInteraction, { players, library, settings }: CommandContext): Promise<void> {
+  const attachment = interaction.options.getAttachment("file", true);
+  library.checkCanUpload(interaction.guildId, levelOf(interaction.member, settings));
+
+  // Checking (and maybe converting) the file takes a few seconds.
+  await interaction.deferReply();
+  const voice = voiceOf(interaction);
+  // Join voice first, so "join a voice channel first" doesn't come after the file was saved.
+  await players.join(interaction.guildId, voice);
+
+  const file = await library.addAttachment(interaction.guildId, attachment, { id: interaction.user.id, name: interaction.member.displayName });
+  const { item, position } = await library.play(interaction.guildId, file.id, { ...voice, requestedBy: requesterOf(interaction) });
+  const status = position === 0 ? `Now playing ${formatItem(item)}` : `Queued at #${position}: ${formatItem(item)}`;
+  await interaction.editReply(`${status}\nSaved to the library, so it can be played again with /library play.`);
+}
+
+function requesterOf(interaction: GuildCommandInteraction) {
+  return { id: interaction.user.id, name: interaction.member.displayName, via: "discord" as const };
+}
+
+/** The requester's voice channel (to join it) and this text channel (for errors later). */
+function voiceOf(interaction: GuildCommandInteraction) {
+  return {
+    voiceChannelId: interaction.guild.voiceStates.cache.get(interaction.user.id)?.channelId ?? null,
+    textChannelId: interaction.channelId,
+  };
+}

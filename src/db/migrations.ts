@@ -88,6 +88,29 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX playlist_items_by_playlist ON playlist_items (playlist_id, position);
   `,
+
+  // 3: the library of uploaded files (milestone 8)
+  `
+  -- Each server's uploaded audio files. The file itself is data/library/<guild_id>/<file_name>, where file_name is
+  -- "<id>.<extension>": the uploaded name (original_name) is only shown, never used in a path.
+  CREATE TABLE library_files (
+    id               TEXT PRIMARY KEY,
+    guild_id         TEXT NOT NULL,
+    file_name        TEXT NOT NULL,
+    original_name    TEXT NOT NULL,
+    title            TEXT NOT NULL,
+    artist           TEXT,
+    duration_ms      INTEGER NOT NULL,
+    size_bytes       INTEGER NOT NULL,
+    uploaded_by_id   TEXT NOT NULL,
+    uploaded_by_name TEXT NOT NULL,
+    created_at       INTEGER NOT NULL
+  );
+  CREATE INDEX library_files_by_guild ON library_files (guild_id, created_at);
+
+  -- Who may upload: 'dj', 'admin' or 'off' (src/shared/library.ts).
+  ALTER TABLE guild_settings ADD COLUMN upload_permission TEXT NOT NULL DEFAULT 'dj';
+  `,
 ];
 
 /** Brings the database up to date by running the migrations it hasn't run yet. */

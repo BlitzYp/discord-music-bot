@@ -1,8 +1,15 @@
 import { type FormEvent, useEffect, useState } from "react";
 import * as api from "../api";
-import { type AdminStatus, formatDuration, type GlobalSettings, YOUTUBE_MODES, type YoutubeMode } from "../shared";
+import {
+  type AdminStatus,
+  formatDuration,
+  GLOBAL_SETTING_LIMITS,
+  type GlobalSettings,
+  YOUTUBE_MODES,
+  type YoutubeMode,
+} from "../shared";
 import { useAction } from "../useAction";
-import { Field } from "./GuildSettingsForm";
+import { Field, NumberInput } from "./GuildSettingsForm";
 
 const YOUTUBE_MODE_LABELS: Record<YoutubeMode, string> = {
   auto: "Automatic: Lavalink's YouTube plugin, yt-dlp if it fails (recommended)",
@@ -79,6 +86,24 @@ function GlobalSettingsForm() {
         </label>
       </Field>
 
+      <Field label="Largest upload" hint="The biggest audio file one library upload may be.">
+        <NumberInput
+          value={draft.maxUploadMb}
+          limits={GLOBAL_SETTING_LIMITS.maxUploadMb}
+          unit="MB"
+          onChange={(value) => setDraft({ ...draft, maxUploadMb: value ?? draft.maxUploadMb })}
+        />
+      </Field>
+
+      <Field label="Library space per server" hint="How much disk space each server's library may use. Files already uploaded stay when you lower it.">
+        <NumberInput
+          value={draft.guildQuotaMb}
+          limits={GLOBAL_SETTING_LIMITS.guildQuotaMb}
+          unit="MB"
+          onChange={(value) => setDraft({ ...draft, guildQuotaMb: value ?? draft.guildQuotaMb })}
+        />
+      </Field>
+
       <div className="save-row">
         <button type="submit" className="primary" disabled={pending || !hasChanges}>
           {pending ? "Saving…" : "Save"}
@@ -151,6 +176,15 @@ function StatusCard() {
             </button>
             {updateMessage && <span className="muted"> {updateMessage}</span>}
             {update.error && <span className="error-text"> {update.error}</span>}
+          </dd>
+
+          <dt>ffmpeg</dt>
+          <dd>
+            {status.ffmpeg.version ?? (
+              <span className="error-text">
+                not found: library uploads won't work (install it with <code>winget install Gyan.FFmpeg</code>, then restart the bot)
+              </span>
+            )}
           </dd>
         </dl>
       )}

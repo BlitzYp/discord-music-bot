@@ -7,8 +7,14 @@ import { downloadAudio, fetchInfo, fetchPlaylist } from "./ytdlp.js";
 
 const YOUTUBE_HOSTS = new Set(["youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be"]);
 
-/** The two ways of turning a link into something Lavalink can play. */
-export type ResolveMethod = "lavalink" | "ytdlp";
+/**
+ * The ways of turning a source into something Lavalink can play: a link through Lavalink or through a yt-dlp
+ * download, or a library file through Lavalink's local source.
+ */
+export type ResolveMethod = "lavalink" | "ytdlp" | "file";
+
+/** Finds a library file's path on disk, or null if the file was deleted from the library. */
+export type LibraryFileLookup = (fileId: string) => string | null;
 
 export interface ResolvedTrack {
   track: Track;
@@ -33,6 +39,7 @@ export function parseInput(input: string): Extract<TrackSource, { url: string }>
 
 /** The methods to try for a link, in order. `youtubeMode` is the owner's setting (see src/shared/settings.ts). */
 function methodsFor(source: TrackSource, youtubeMode: YoutubeMode): ResolveMethod[] {
+  if (source.kind === "file") return ["file"]; // nothing to fall back to: the file is all there is
   if (source.kind === "youtube") {
     switch (youtubeMode) {
       case "lavalink":
@@ -56,15 +63,19 @@ export function fallbackMethod(source: TrackSource, failed: ResolveMethod, youtu
 /**
  * Turns a source into a track Lavalink can play, trying each method in order until one works.
  * Called right before a track plays. `only` restricts it to one method, e.g. to retry with yt-dlp after
- * Lavalink loaded a track but couldn't play it.
+ * Lavalink loaded a track but couldn't play it. `findLibraryFile` looks up library files in the player's server.
  */
 export async function resolvePlayable(
   lavalink: LavalinkManager,
   source: TrackSource,
   requester: Requester,
-  options: { youtubeMode: YoutubeMode; only?: ResolveMethod },
+  options: { youtubeMode: YoutubeMode; only?: ResolveMethod; findLibraryFile: LibraryFileLookup },
 ): Promise<ResolvedTrack> {
-  if (source.kind === "file") throw new UserError("Library files aren't supported yet.");
+  if (source.kind === "file") {
+    const path = options.findLibraryFile(source.fileId);
+    if (!path) throw new UserError("That file was deleted from the library.");
+    return { track: await loadFileWithLavalink(lavalink, path, requester), method: "file" };
+  }
 
   const methods = options.only ? [options.only] : methodsFor(source, options.youtubeMode);
   let lastError: unknown;
@@ -94,7 +105,8 @@ export async function fetchMetadata(
   requester: Requester,
   youtubeMode: YoutubeMode,
 ): Promise<{ meta: TrackMetadata; track?: Track }> {
-  if (source.kind === "file") throw new UserError("Library files aren't supported yet.");
+  // Library files get their title and length from the library when they're queued (LibraryManager.play).
+  if (source.kind === "file") throw new UserError("Library files are queued from the library, not by link.");
 
   const methods = methodsFor(source, youtubeMode);
   let lastError: unknown;

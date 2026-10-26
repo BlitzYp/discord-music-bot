@@ -1,6 +1,12 @@
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import * as api from "../api";
-import { type GuildSettings, type GuildSettingsResponse, SETTING_LIMITS } from "../shared";
+import { type GuildSettings, type GuildSettingsResponse, SETTING_LIMITS, UPLOAD_PERMISSIONS, type UploadPermission } from "../shared";
+
+const UPLOAD_PERMISSION_LABELS: Record<UploadPermission, string> = {
+  dj: "DJs (and admins)",
+  admin: "Only server admins",
+  off: "Nobody: uploads are off",
+};
 import { useAction } from "../useAction";
 
 /** A server's settings page (DJ role, volume, limits...). Only shown to server admins; the bot checks again. */
@@ -126,6 +132,19 @@ export function GuildSettingsForm({ guildId }: { guildId: string }) {
         </select>
       </Field>
 
+      <Field
+        label="Who can upload to the library"
+        hint="Uploaded audio files (on the website's Library tab, or with /play file: in Discord) are kept for everyone in the server to play."
+      >
+        <select value={draft.uploadPermission} onChange={(event) => change("uploadPermission", event.target.value as UploadPermission)}>
+          {UPLOAD_PERMISSIONS.map((permission) => (
+            <option key={permission} value={permission}>
+              {UPLOAD_PERMISSION_LABELS[permission]}
+            </option>
+          ))}
+        </select>
+      </Field>
+
       <div className="save-row">
         <button type="submit" className="primary" disabled={pending || !hasChanges}>
           {pending ? "Saving…" : "Save"}
@@ -158,7 +177,7 @@ interface NumberInputProps {
 }
 
 /** A whole-number input. The browser stops numbers outside `limits`; the bot checks them again when saving. */
-function NumberInput({ value, limits, unit, placeholder, onChange }: NumberInputProps) {
+export function NumberInput({ value, limits, unit, placeholder, onChange }: NumberInputProps) {
   // The box keeps its own text, so it can be emptied while typing a new number without snapping back.
   const [text, setText] = useState(value === null ? "" : String(value));
   // Follow the value when it changes from outside, e.g. after saving.

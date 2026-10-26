@@ -2,7 +2,7 @@
 
 A self-hosted Discord bot that plays music in voice channels. Audio is played by [Lavalink](https://lavalink.dev), a separate Java server that runs next to the bot on the same machine.
 
-**Status:** milestone 7 of 9 (see the milestones in [AGENTS.md](AGENTS.md)). Control playback with slash commands or on the website (log in with Discord). Settings are on the website, queues survive restarts, and each server can keep saved playlists.
+**Status:** milestone 8 of 9 (see the milestones in [AGENTS.md](AGENTS.md)). Control playback with slash commands or on the website (log in with Discord). Settings are on the website, queues survive restarts, and each server can keep saved playlists and a library of uploaded audio files.
 
 - [How it works](docs/how-it-works.md): a tour of the code, and how to add a command
 - [Design](docs/design.md): the full design and the decisions behind it
@@ -13,6 +13,7 @@ A self-hosted Discord bot that plays music in voice channels. Audio is played by
 | Command | What it does |
 |---|---|
 | `/play <link>` | Joins your voice channel and plays the link, or adds it to the queue if something is already playing. For a YouTube playlist link, add `playlist: True` to queue every song of the playlist (up to 500). |
+| `/play file:<attachment>` | Plays an audio file you attach, and saves it to the server's library (see below). |
 | `/pause` / `/resume` | Pauses or resumes the current track. After a restart, `/resume` joins your voice channel and continues the song where it stopped. |
 | `/skip` | Skips to the next track |
 | `/stop` | Stops playback, clears the queue and leaves the voice channel |
@@ -24,8 +25,8 @@ A self-hosted Discord bot that plays music in voice channels. Audio is played by
 | `/loop off\|track\|queue` | Repeats nothing, the current track, or the whole queue |
 | `/volume [percent]` | Shows or sets the volume, 0–150% (100 is normal). Goes back to the server's starting volume when the bot leaves. |
 | `/filter <effect>` | Adds an audio effect: nightcore, vaporwave, bassboost, 8d, karaoke or soft (`off` removes it). One at a time; it stays on for the next songs until changed or the bot leaves. |
-
 | `/playlist ...` | This server's saved playlists; see below |
+| `/library ...` | This server's uploaded audio files; see below |
 
 The bot leaves the voice channel by itself, clearing the queue, after being alone in it for 60 seconds (changeable per server).
 
@@ -47,7 +48,20 @@ Each server has its own saved playlists. Songs are saved as links, so a playlist
 
 Names can be up to 50 characters, are unique per server, and upper/lower case doesn't matter (`chill` finds "Chill"). A playlist holds at most 500 songs. The server's queue limit and longest-song setting apply when a playlist is played: songs that don't fit or are too long are left out, and the reply says how many.
 
-**Who can use what:** `/queue` and the `/playlist` commands marked "everyone" are for everyone; the other commands are for DJs. Server admins (Administrator or Manage Server) and the bot owner (`OWNER_ID`) can always do everything. **Until a server admin picks a DJ role on the website's Settings tab, nobody else is a DJ.** Pick `@everyone` there to let every member control playback.
+### Library
+
+Each server has a library of audio files people uploaded: the fallback for when YouTube and the other sites break, or for music that isn't online at all. Files are added with `/play file:` or `/library upload` in Discord, or on the website's **Library** tab (better for big files: free Discord accounts can only attach about 10 MB).
+
+| Command | Who | What it does |
+|---|---|---|
+| `/library list [search]` | everyone | The library's files (the first 15, or those matching the search), and how much space they use |
+| `/library play <file>` | DJs | Plays a file from the library, or adds it to the queue. Discord suggests files as you type. |
+| `/library upload <file>` | uploaders | Saves an attached file to the library without playing it |
+| `/library delete <file>` | DJs | Deletes a file from the library |
+
+Who counts as an uploader is a server setting (DJs by default; see Settings below). Most audio formats work: MP3, FLAC, WAV, OGG/Opus, M4A and WebM play as they are, and anything else ffmpeg can read (WMA, AIFF, 24-bit WAV, even videos) is converted to Opus when it's added. The title and artist come from the file's tags, or else from its file name. The owner sets the largest file and how much space each server gets (100 MB per file and 2000 MB per server to start with) on the Admin page.
+
+**Who can use what:** `/queue` and the `/playlist` and `/library` commands marked "everyone" are for everyone; the other commands are for DJs. Server admins (Administrator or Manage Server) and the bot owner (`OWNER_ID`) can always do everything. **Until a server admin picks a DJ role on the website's Settings tab, nobody else is a DJ.** Pick `@everyone` there to let every member control playback.
 
 **After a restart** (including every save while `npm run dev` runs), the bot remembers each server's song, position, queue, loop mode, effect and recently played list. If people are still in its voice channel, it rejoins and carries on from where it stopped. Otherwise the song waits, paused, until someone uses `/resume` or `/play`.
 
@@ -59,7 +73,7 @@ Links are played through Lavalink when it can. When it can't (YouTube blocks Lav
 
 ### 1. Install the prerequisites
 
-You need Node.js (LTS) and Java 17 or newer. ffmpeg isn't used yet; milestone 8 (uploaded files) needs it.
+You need Node.js (LTS), Java 17 or newer, and ffmpeg (for checking and converting files added to the library).
 
 ```
 winget install OpenJS.NodeJS.LTS EclipseAdoptium.Temurin.21.JDK Gyan.FFmpeg
@@ -124,6 +138,7 @@ The **Player** tab starts with the current song, artwork, progress and playback 
 - **Everyone** sees the current song with its progress bar, the active effect, the queue, and the recently played songs. Click a song's title to open it on YouTube (or wherever it's from) in a new tab.
 - **DJs** also get the controls: add a link, pause/resume, skip, stop, drag the progress bar to seek, volume, loop, effects, reorder queued songs by dragging them (or with ↑↓; dragging doesn't work on most phones), remove queued songs, shuffle, clear the queue (the current song keeps playing), and the **+** button on recently played songs to add them to the queue again, or clear that list.
 - Adding a song from the website joins the voice channel you're in, like `/play`. When you paste a link from a YouTube playlist, a checkbox offers to add the whole playlist.
+- The **Library** tab (everyone) lists the server's uploaded files, with a search box, how much space they use, and who uploaded each. Uploaders (DJs, unless a server admin changed it) get **Upload audio files**: pick one or more files and they upload one after another, with a progress bar. DJs also get **+** to add a file to the queue and **✕** to delete it.
 - The **Playlists** tab (everyone) lists the server's playlists; click one to see its songs. Everyone can add songs and remove the ones they added. DJs also get **Play** (replaces the queue; it asks first if something is queued), **Add to queue**, dragging (or ↑↓) to reorder, remove any song, **Rename**, **Delete**, a "New playlist" form (empty, or imported from a YouTube playlist link) and **Save the queue as a playlist**. Changes show up live for everyone, including ones made in Discord.
 - **Server admins** get a **Settings** tab for that server:
 
@@ -136,8 +151,9 @@ The **Player** tab starts with the current song, artwork, progress and playback 
   | Longest song | Longer songs can't be added; livestreams are always allowed (default: no limit). |
   | Leave an empty channel after | How long the bot stays alone in voice before leaving (default 60 s; 0 = never). |
   | Announce songs in | A text channel where the bot posts "Now playing …" for every new song (default: off). |
+  | Who can upload to the library | DJs (and admins), only admins, or nobody (default: DJs). |
 
-- **You (the bot owner)** also get an **Admin** button at the top: how YouTube links are loaded (automatic, only Lavalink's plugin, or only yt-dlp), whether yt-dlp updates on every start, an "Update now" button for yt-dlp, and the status of the bot, Lavalink and yt-dlp.
+- **You (the bot owner)** also get an **Admin** button at the top: how YouTube links are loaded (automatic, only Lavalink's plugin, or only yt-dlp), whether yt-dlp updates on every start, an "Update now" button for yt-dlp, the largest library upload and the library space per server, and the status of the bot, Lavalink, yt-dlp and ffmpeg.
 
 Settings apply right away; there's nothing to restart.
 
@@ -154,6 +170,7 @@ Other scripts:
 ## Troubleshooting
 
 - **"npm.ps1 cannot be loaded because running scripts is disabled"** in PowerShell: Windows blocks PowerShell scripts by default. Either run `npm.cmd run ...` instead of `npm run ...`, or allow local scripts once with `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` (or use Command Prompt instead of PowerShell).
+- **`npm install` fails at `better-sqlite3` with "Could not find any Visual Studio installation"**: npm tries to compile the database library from source even though it ships a ready-made Windows build. Skip the compile step with `npm install --ignore-scripts`, then run `npm rebuild esbuild` (the one package that does need its install step).
 - **`Invalid .env`** when starting: the message lists which variables are missing.
 - **"The audio server (Lavalink) isn't connected"**: Lavalink isn't running, or `LAVALINK_PASSWORD` / `LAVALINK_PORT` don't match. Start it with `npm run lavalink` (not `java -jar` directly), because that script passes the password from `.env`. The bot keeps retrying every 5 seconds, so there's no need to restart it.
 - **New slash commands don't show up**: the Discord app caches the command list. Press **Ctrl+R** in Discord to reload it (or fully quit and reopen it). If they're still missing, check the bot's console for `registered N global commands`. Setting `DEV_GUILD_ID` makes updates instant in that one server.
@@ -173,8 +190,14 @@ Other scripts:
 - **"That's a YouTube mix made for your account"**: personal mixes (Replay Mix, My Supermix, Discover Mix…) exist only for you while signed in, and the bot isn't signed in to YouTube. In YouTube Music, open the mix → ⋮ → **Save to playlist**, make that playlist Public or Unlisted, and import it. Mixes started from a song (a link with both `v=` and `list=RD…`) work as they are.
 - **"YouTube says that playlist doesn't exist"**: it's private (or was deleted). Set it to Public or Unlisted in YouTube.
 - **An import has fewer songs than the YouTube playlist**: private and deleted videos are skipped, and at most 500 songs are read.
-- **Start completely fresh** (forget all settings, queues, history and playlists): stop the bot and delete `data/bot.db` (and `bot.db-wal` / `bot.db-shm` next to it, if present). It's recreated on the next start.
-- Lavalink's own logs are in `lavalink/logs/`. Downloaded songs are kept in `data/ytdlp-cache/` (the 20 most recent) and deleted when the bot starts.
+- **"ffmpeg isn't installed on the bot's computer"** when adding a file: install it (`winget install Gyan.FFmpeg`), then restart the bot from a new terminal, so it sees the updated PATH. The Admin page shows whether the bot finds ffmpeg.
+- **"That file isn't audio, or it's damaged"** / **"That file has no sound in it"**: ffmpeg couldn't find any sound in the file. Check that it plays on your computer.
+- **"The library is full"**: the server's files use up its space. Delete some on the Library tab (or with `/library delete`), or raise "Library space per server" on the Admin page.
+- **"That file is too big"**: raise "Largest upload" on the Admin page. Big files are better uploaded on the website than in Discord, which limits attachments to about 10 MB for free accounts.
+- **"That file was deleted from the library"**: a queued (or playlist) song was a library file that has since been deleted. The queue moves on.
+- **Uploads are refused even for admins**: the server's "Who can upload to the library" setting is "Nobody". Change it on the Settings tab.
+- **Start completely fresh** (forget all settings, queues, history, playlists and the library): stop the bot and delete `data/bot.db` (and `bot.db-wal` / `bot.db-shm` next to it, if present) and the `data/library` folder. They're recreated on the next start.
+- Lavalink's own logs are in `lavalink/logs/`. Downloaded songs are kept in `data/ytdlp-cache/` (the 20 most recent) and deleted when the bot starts. Library files are in `data/library/<server id>/`, named by random ids; their titles are in the database.
 
 ## Project layout
 
@@ -189,6 +212,7 @@ src/
     settingsStore.ts    Global and per-server settings
     playerStateStore.ts Each server's saved song, position, queue and history
     playlistStore.ts    Each server's saved playlists and their songs
+    libraryStore.ts     Each server's library files (the audio itself is on disk, in data/library/)
   bot/
     client.ts           The discord.js client
     commands/           One file per slash command
@@ -204,10 +228,15 @@ src/
     errors.ts           UserError: errors whose message is shown to users
   playlists/
     PlaylistManager.ts  Saved playlists: create, edit, import from YouTube, play (both /playlist and the website use it)
+  library/
+    LibraryManager.ts   The library: adding files (check, convert, store), deleting, queuing (/play file:, /library, the website)
+    ffmpeg.ts           Runs ffprobe (is it audio? how long? tags) and ffmpeg (converting to Opus)
+    paths.ts            Where library files live on disk
   web/
     server.ts           Starts the website: REST API, Socket.IO and the React app on one port
     routes/             REST API routes (under /api): auth.ts (login), guilds.ts (read), player.ts (controls),
-                        playlists.ts (the Playlists tab), settings.ts (a server's settings), admin.ts (the owner's Admin page)
+                        playlists.ts (the Playlists tab), library.ts (the Library tab and uploads),
+                        settings.ts (a server's settings), admin.ts (the owner's Admin page)
     session.ts          The signed login cookie
     access.ts           requireGuildAccess(): the permission check every server route starts with
     http.ts             route(): turns errors into HTTP answers
@@ -215,16 +244,17 @@ src/
     frontend.ts         Serves the React app (Vite in development, web/dist in production)
   shared/               Types and helpers used by both the bot and the website
 web/                    The React website (Vite)
-  src/App.tsx           The page: login, server picker, the server's Player, Playlists and Settings tabs, the Admin page
+  src/App.tsx           The page: login, server picker, the server's Player, Playlists, Library and Settings tabs, the Admin page
   src/components/       AddSong, NowPlaying (+ SeekBar, PlayerControls), EffectPicker, QueueList, HistoryList,
-                        PlaylistsPage (+ PlaylistView), GuildSettingsForm, AdminPanel
+                        PlaylistsPage (+ PlaylistView), LibraryPage, GuildSettingsForm, AdminPanel
   src/api.ts            One function per REST call
   src/useGuildState.ts  Live state from the bot over Socket.IO
 lavalink/
   application.yml       Lavalink settings (sources, YouTube plugin)
 scripts/                Helpers for downloading Lavalink and yt-dlp, and starting Lavalink
 bin/                    yt-dlp (downloaded, not in git)
-data/bot.db             Settings, queues, history and playlists (SQLite, not in git)
+data/bot.db             Settings, queues, history, playlists and the library's file list (SQLite, not in git)
+data/library/           Library files, one folder per server (not in git)
 data/ytdlp-cache/       Songs downloaded by yt-dlp (not in git)
 docs/                   Longer explanations
 ```

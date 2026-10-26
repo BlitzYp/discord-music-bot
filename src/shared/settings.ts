@@ -1,6 +1,7 @@
 // Settings shared by the bot and the website: the owner's global settings and each server's settings.
 // They are stored in SQLite (src/db/settingsStore.ts) and edited on the website.
 
+import type { UploadPermission } from "./library.js";
 import { MAX_VOLUME } from "./player.js";
 
 /**
@@ -17,12 +18,24 @@ export interface GlobalSettings {
   youtubeMode: YoutubeMode;
   /** Update yt-dlp every time the bot starts. YouTube changes often break old versions. */
   ytdlpAutoUpdate: boolean;
+  /** The biggest file one library upload may be, in megabytes. */
+  maxUploadMb: number;
+  /** How much space each server's library may use, in megabytes. */
+  guildQuotaMb: number;
 }
 
 export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   youtubeMode: "auto",
   ytdlpAutoUpdate: true,
+  maxUploadMb: 100,
+  guildQuotaMb: 2000,
 };
+
+/** The allowed range of each global number setting. The Admin page uses them for its inputs; the server checks them. */
+export const GLOBAL_SETTING_LIMITS = {
+  maxUploadMb: { min: 1, max: 2000 },
+  guildQuotaMb: { min: 10, max: 1_000_000 },
+} as const;
 
 /** One server's settings. Server admins change them on the website's Settings page. */
 export interface GuildSettings {
@@ -43,6 +56,8 @@ export interface GuildSettings {
   leaveWhenEmptyAfterSec: number;
   /** A text channel where the bot posts "Now playing" for every new song. null = no announcements. */
   announceChannelId: string | null;
+  /** Who may upload files to the server's library (see UPLOAD_PERMISSIONS in src/shared/library.ts). */
+  uploadPermission: UploadPermission;
 }
 
 export const DEFAULT_GUILD_SETTINGS: GuildSettings = {
@@ -53,6 +68,7 @@ export const DEFAULT_GUILD_SETTINGS: GuildSettings = {
   requireSameVoiceChannel: false,
   leaveWhenEmptyAfterSec: 60,
   announceChannelId: null,
+  uploadPermission: "dj",
 };
 
 /** The allowed range of each number setting. The website uses them for its inputs; the server checks them. */
@@ -90,4 +106,6 @@ export interface AdminStatus {
     memoryUsedMb: number | null;
   };
   ytdlp: { version: string | null };
+  /** ffmpeg checks and converts library uploads. null = not found. */
+  ffmpeg: { version: string | null };
 }

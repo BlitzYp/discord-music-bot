@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import type { LavalinkManager } from "lavalink-client";
+import type { LibraryStore } from "../db/libraryStore.js";
 import type { PlayerStateStore, SavedPlayer, SavedStatus } from "../db/playerStateStore.js";
 import type { SettingsStore } from "../db/settingsStore.js";
+import { libraryFilePath } from "../library/paths.js";
 import { formatDuration } from "../shared/format.js";
 import { type AddManyResult, MAX_PLAYLIST_SONGS, type PlaylistPlayMode } from "../shared/playlists.js";
 import type { AudioFilter, LoopMode, PlayerSnapshot, QueueItem, Requester } from "../shared/types.js";
@@ -60,6 +62,8 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
     readonly lavalink: LavalinkManager,
     readonly settings: SettingsStore,
     private readonly store: PlayerStateStore,
+    /** Where library files are, so queued files can be found when they play. */
+    private readonly library: LibraryStore,
   ) {
     super();
     for (const saved of store.loadAll()) this.getOrCreatePlayer(saved.guildId).restore(saved);
@@ -85,6 +89,26 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
 
     const { position } = await player.run(() => player.enqueue(item, track));
     return { item, position };
+  }
+
+  /**
+   * Adds an item that's already complete (title, length and so on known, e.g. a library file) to the server's
+   * queue, joining the requester's voice channel first if needed. Returns its position (0 = playing now).
+   */
+  async playItem(guildId: string, item: QueueItem, request: VoiceRequest): Promise<{ position: number }> {
+    this.checkDurationLimit(guildId, item);
+    const player = this.getOrCreatePlayer(guildId);
+    await player.run(() => player.ensureConnected(request.voiceChannelId, request.textChannelId));
+    return player.run(() => player.enqueue(item));
+  }
+
+  /**
+   * Joins the requester's voice channel, unless the bot is already in one. For work that takes a while before
+   * anything is queued (saving a Discord attachment to the library), so "join a voice channel first" comes first.
+   */
+  async join(guildId: string, request: VoiceRequest): Promise<void> {
+    const player = this.getOrCreatePlayer(guildId);
+    await player.run(() => player.ensureConnected(request.voiceChannelId, request.textChannelId));
   }
 
   /**
@@ -283,8 +307,14 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
     if (this.saving) this.store.saveStatus(status);
   }
 
+  /** Where a library file of this server is on disk, or null if it was deleted. Used when a queued file's turn comes. */
+  libraryFilePath(guildId: string, fileId: string): string | null {
+    const file = this.library.get(guildId, fileId);
+    return file ? libraryFilePath(guildId, file.fileName) : null;
+  }
+
   /** Refuses songs longer than the server's `maxTrackDurationSec` setting. Livestreams have no length and are allowed. */
-  private checkDurationLimit(guildId: string, meta: TrackMetadata): void {
+  private checkDurationLimit(guildId: string, meta: Pick<TrackMetadata, "durationMs">): void {
     if (this.isTooLong(guildId, meta.durationMs)) {
       const limitMs = this.settings.guild(guildId).maxTrackDurationSec! * 1000;
       throw new UserError(

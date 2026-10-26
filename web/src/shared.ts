@@ -4,7 +4,7 @@ export { formatDuration } from "../../src/shared/format";
 export { AUDIO_FILTERS, FILTER_DESCRIPTIONS, playbackRate } from "../../src/shared/filters";
 export { hasLevel, type PermissionLevel } from "../../src/shared/permissions";
 export { MAX_VOLUME } from "../../src/shared/player";
-export { SETTING_LIMITS, YOUTUBE_MODES } from "../../src/shared/settings";
+export { GLOBAL_SETTING_LIMITS, SETTING_LIMITS, YOUTUBE_MODES } from "../../src/shared/settings";
 export type {
   AdminStatus,
   GlobalSettings,
@@ -20,3 +20,5 @@ export type {
   PlaylistPlayMode,
   PlaylistSummary,
 } from "../../src/shared/playlists";
+export { formatBytes, UPLOAD_ACCEPT, UPLOAD_PERMISSIONS } from "../../src/shared/library";
+export type { LibraryFile, LibraryOverview, UploadPermission } from "../../src/shared/library";

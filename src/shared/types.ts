@@ -99,6 +99,8 @@ export interface ServerToClientEvents {
   error: (message: string) => void;
   /** A playlist of the server changed (created, renamed, deleted, songs added/removed/moved). Reload them. */
   "playlists:update": () => void;
+  /** A file was added to or deleted from the server's library. Reload it. */
+  "library:update": () => void;
 }
 
 /** Messages the browser sends to the server. */

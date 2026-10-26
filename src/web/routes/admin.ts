@@ -1,17 +1,22 @@
 import { Router } from "express";
 import type { LavalinkManager } from "lavalink-client";
 import { z } from "zod";
+import { ffmpegVersion } from "../../library/ffmpeg.js";
 import { updateYtDlp, ytDlpVersion } from "../../player/resolvers/ytdlp.js";
-import { type AdminStatus, YOUTUBE_MODES } from "../../shared/settings.js";
+import { type AdminStatus, GLOBAL_SETTING_LIMITS, YOUTUBE_MODES } from "../../shared/settings.js";
 import { requireOwner } from "../access.js";
 import { parseBody, route } from "../http.js";
 import type { WebContext } from "../server.js";
+
+const whole = (limits: { min: number; max: number }) => z.number().int().min(limits.min).max(limits.max);
 
 /** What PATCH /admin/settings accepts. Unknown keys are refused. */
 const globalSettingsChanges = z
   .object({
     youtubeMode: z.enum(YOUTUBE_MODES),
     ytdlpAutoUpdate: z.boolean(),
+    maxUploadMb: whole(GLOBAL_SETTING_LIMITS.maxUploadMb),
+    guildQuotaMb: whole(GLOBAL_SETTING_LIMITS.guildQuotaMb),
   })
   .partial()
   .strict();
@@ -51,6 +56,7 @@ export function adminRoutes({ client, players, settings }: WebContext): Router {
         },
         lavalink: lavalinkStatus(players.lavalink),
         ytdlp: { version: await ytDlpVersion().catch(() => null) },
+        ffmpeg: { version: await ffmpegVersion().catch(() => null) },
       };
       res.json(status);
     }),

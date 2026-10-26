@@ -1,5 +1,6 @@
 import type { AutocompleteInteraction, ChatInputCommandInteraction, SharedSlashCommand } from "discord.js";
 import type { SettingsStore } from "../../db/settingsStore.js";
+import type { LibraryManager } from "../../library/LibraryManager.js";
 import type { PermissionLevel } from "../../permissions.js";
 import type { PlayerManager } from "../../player/PlayerManager.js";
 import type { PlaylistManager } from "../../playlists/PlaylistManager.js";
@@ -7,6 +8,7 @@ import type { PlaylistManager } from "../../playlists/PlaylistManager.js";
 export interface CommandContext {
   players: PlayerManager;
   playlists: PlaylistManager;
+  library: LibraryManager;
   settings: SettingsStore;
 }
 

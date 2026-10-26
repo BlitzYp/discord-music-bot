@@ -5,9 +5,11 @@ import { registerPlayerEvents } from "./bot/events/playerEvents.js";
 import { registerReady } from "./bot/events/ready.js";
 import { registerVoiceStateUpdate } from "./bot/events/voiceStateUpdate.js";
 import { openDatabase } from "./db/database.js";
+import { LibraryStore } from "./db/libraryStore.js";
 import { PlayerStateStore } from "./db/playerStateStore.js";
 import { PlaylistStore } from "./db/playlistStore.js";
 import { SettingsStore } from "./db/settingsStore.js";
+import { LibraryManager } from "./library/LibraryManager.js";
 import { createLavalink } from "./player/lavalink.js";
 import { PlayerManager } from "./player/PlayerManager.js";
 import { clearDownloads, updateYtDlp } from "./player/resolvers/ytdlp.js";
@@ -28,15 +30,18 @@ if (settings.global().ytdlpAutoUpdate) {
 
 const client = createClient();
 const lavalink = createLavalink(client, config);
+const libraryStore = new LibraryStore(db);
 // Loads the queues saved before the last shutdown (see PlayerManager's constructor).
-const players = new PlayerManager(lavalink, settings, new PlayerStateStore(db));
+const players = new PlayerManager(lavalink, settings, new PlayerStateStore(db), libraryStore);
 const playlists = new PlaylistManager(new PlaylistStore(db), players);
+const library = new LibraryManager(libraryStore, settings, players);
+await library.cleanUp();
 
 // Lavalink needs Discord's voice state and voice server updates to join channels.
 client.on("raw", (packet) => void lavalink.sendRawData(packet));
 
 registerReady(client, lavalink, players, config);
-registerInteractionCreate(client, { players, playlists, settings });
+registerInteractionCreate(client, { players, playlists, library, settings });
 registerPlayerEvents(client, players, settings);
 registerVoiceStateUpdate(client, players);
 
@@ -56,6 +61,6 @@ process.once("SIGTERM", () => void shutdown());
 
 await client.login(config.DISCORD_TOKEN);
 // The bot keeps working in Discord even if the website can't start (e.g. the port is taken).
-await startWebServer({ client, players, playlists, settings, config }).catch((error) =>
+await startWebServer({ client, players, playlists, library, settings, config }).catch((error) =>
   console.error("[web] the website couldn't start:", error instanceof Error ? error.message : error),
 );

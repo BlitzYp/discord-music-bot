@@ -7,6 +7,8 @@ import type {
   GuildSettings,
   GuildSettingsResponse,
   GuildSummary,
+  LibraryFile,
+  LibraryOverview,
   LoopMode,
   PlayerSnapshot,
   PlaylistDetails,
@@ -70,6 +72,9 @@ export function fetchGuilds(): Promise<GuildSummary[]> {
 type State = Promise<PlayerSnapshot>;
 
 export const addToQueue = (guildId: string, input: string): State => request("POST", `/guilds/${guildId}/queue`, { input });
+/** Queues a file from the server's library. */
+export const addLibraryFileToQueue = (guildId: string, fileId: string): State =>
+  request("POST", `/guilds/${guildId}/queue`, { fileId });
 /** Queues every song of a YouTube playlist link (up to 500). */
 export const addWholePlaylistToQueue = (guildId: string, input: string): State =>
   request("POST", `/guilds/${guildId}/queue`, { input, wholePlaylist: true });
@@ -132,6 +137,40 @@ export const removeFromPlaylist = (guildId: string, playlistId: number, itemId: 
 /** `position` is 1-based, like the numbers in the list. */
 export const moveInPlaylist = (guildId: string, playlistId: number, itemId: number, position: number): Playlist =>
   request("PATCH", `${playlistsPath(guildId)}/${playlistId}/items/${itemId}`, { position });
+
+// ---- The library (everyone looks; uploading follows the server's setting; DJs delete) ----
+
+export const fetchLibrary = (guildId: string): Promise<LibraryOverview> => request("GET", `/guilds/${guildId}/library`);
+export const deleteLibraryFile = (guildId: string, fileId: string): Promise<LibraryOverview> =>
+  request("DELETE", `/guilds/${guildId}/library/${fileId}`);
+
+/**
+ * Uploads a file to the server's library. `onProgress` gets the share sent so far (0 to 1); after it reaches 1,
+ * the bot still checks (and maybe converts) the file before answering.
+ *
+ * This uses XMLHttpRequest rather than fetch, because fetch can't report upload progress. The upload isn't JSON,
+ * so it carries the header the bot requires instead (see UPLOAD_HEADER in src/web/http.ts).
+ */
+export function uploadToLibrary(guildId: string, file: File, onProgress: (sent: number) => void): Promise<LibraryFile> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `/api/guilds/${guildId}/library`);
+    xhr.setRequestHeader("X-Requested-With", "music-bot");
+    xhr.responseType = "json";
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress(event.loaded / event.total);
+    };
+    xhr.onload = () => {
+      const json = xhr.response ?? {};
+      if (xhr.status >= 200 && xhr.status < 300) resolve(json as LibraryFile);
+      else reject(new ApiError(xhr.status, json.error ?? `Upload failed (HTTP ${xhr.status})`));
+    };
+    xhr.onerror = () => reject(new ApiError(0, "The upload was interrupted. Check your connection and try again."));
+    const form = new FormData();
+    form.append("file", file);
+    xhr.send(form);
+  });
+}
 
 // ---- A server's settings (server admins) ----
 

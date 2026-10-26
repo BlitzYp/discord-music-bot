@@ -3,6 +3,7 @@ import type { Client } from "discord.js";
 import express from "express";
 import type { Config } from "../config.js";
 import type { SettingsStore } from "../db/settingsStore.js";
+import type { LibraryManager } from "../library/LibraryManager.js";
 import type { PlayerManager } from "../player/PlayerManager.js";
 import type { PlaylistManager } from "../playlists/PlaylistManager.js";
 import { serveFrontend } from "./frontend.js";
@@ -10,6 +11,7 @@ import { requireJsonForChanges } from "./http.js";
 import { adminRoutes } from "./routes/admin.js";
 import { authRoutes } from "./routes/auth.js";
 import { guildRoutes } from "./routes/guilds.js";
+import { libraryRoutes } from "./routes/library.js";
 import { playerRoutes } from "./routes/player.js";
 import { playlistRoutes } from "./routes/playlists.js";
 import { settingsRoutes } from "./routes/settings.js";
@@ -21,6 +23,7 @@ export interface WebContext {
   client: Client;
   players: PlayerManager;
   playlists: PlaylistManager;
+  library: LibraryManager;
   settings: SettingsStore;
   config: Config;
 }
@@ -42,6 +45,7 @@ export async function startWebServer(context: WebContext): Promise<void> {
   app.use("/api", guildRoutes(context));
   app.use("/api", playerRoutes(context));
   app.use("/api", playlistRoutes(context));
+  app.use("/api", libraryRoutes(context));
   app.use("/api", settingsRoutes(context));
   app.use("/api", adminRoutes(context));
   app.use("/api", (_req, res) => {

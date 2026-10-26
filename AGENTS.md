@@ -25,7 +25,7 @@ Build them in order. Each milestone works end to end in Discord before the next 
 5. **Auth + web controls:** Discord OAuth, server list, permission checks, and the website's controls: adding links, pause/resume, skip, stop, seek, volume, loop, effects, reorder and remove; plus song history. *(working)*
 6. **Settings + persistence:** SQLite, per-server settings page (DJ role!), owner admin panel (YouTube mode, limits, status), queues and history restored after restart. *(written)*
 7. **Playlists:** per-server saved playlists that members add to and DJs play (replacing the queue), importing YouTube playlists, saving the queue as a playlist; `/playlist` and the website's Playlists tab. See "Playlists" in docs/design.md. *(working)*
-8. **Library:** `/play file:`, website uploads, ffprobe/ffmpeg pipeline, library browser.
+8. **Library:** `/play file:`, website uploads, ffprobe/ffmpeg pipeline, library browser; `/library` and the website's Library tab. See "Local audio files" in docs/design.md. *(working)*
 9. **Polish:** text search, Cloudflare Tunnel (public URL), run as a background service (pm2 or NSSM).
 
 ## Architecture rules
@@ -43,4 +43,5 @@ Build them in order. Each milestone works end to end in Discord before the next 
 - **Readable code is a requirement:** the owner wants to read and extend this code without help. Use clear names, small functions and explicit code over clever one-liners. Label boolean arguments. Comment the *why* of anything non-obvious (library quirks, event order, concurrency).
 - **Docs move with the code:** a change that adds or alters behaviour updates `README.md` (setup, commands, troubleshooting) and `docs/how-it-works.md` (code flow, extension guides) in the same change; design changes update `docs/design.md`.
 - The owner's machine is Windows; run commands natively there.
+- **Installing packages:** run `npm install --ignore-scripts` (then `npm rebuild esbuild` after a fresh install). Without it npm tries to compile `better-sqlite3` from source, which fails without Visual Studio, even though the package ships a ready-made Windows build.
 - A change is done when `npm run typecheck` passes and the behaviour has been checked as far as possible without the owner. Lavalink needs no Discord token: start it with `npm run lavalink`, then load links through `lavalink-client` to test resolvers. To test YouTube *playback*, the plugin's `GET /youtube/stream/<videoId>?withClient=<CLIENT>` endpoint streams real audio (send the Lavalink password as the `Authorization` header); run a second Lavalink on another port to compare configs without stopping the owner's. Playback in a voice channel is the owner's check in Discord; say what's left for them to test.

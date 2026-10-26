@@ -1,3 +1,4 @@
+import type { UploadPermission } from "../shared/library.js";
 import {
   DEFAULT_GLOBAL_SETTINGS,
   DEFAULT_GUILD_SETTINGS,
@@ -15,6 +16,7 @@ interface GuildSettingsRow {
   require_same_vc: number;
   leave_after_sec: number;
   announce_channel_id: string | null;
+  upload_permission: UploadPermission;
 }
 
 /**
@@ -64,6 +66,7 @@ export class SettingsStore {
       requireSameVoiceChannel: row.require_same_vc === 1,
       leaveWhenEmptyAfterSec: row.leave_after_sec,
       announceChannelId: row.announce_channel_id,
+      uploadPermission: row.upload_permission,
     };
   }
 
@@ -73,9 +76,9 @@ export class SettingsStore {
     this.db
       .prepare(
         `INSERT INTO guild_settings (guild_id, dj_role_id, default_volume, max_queue_length, max_track_duration_sec,
-                                     require_same_vc, leave_after_sec, announce_channel_id)
+                                     require_same_vc, leave_after_sec, announce_channel_id, upload_permission)
          VALUES (@guildId, @djRoleId, @defaultVolume, @maxQueueLength, @maxTrackDurationSec,
-                 @requireSameVoiceChannel, @leaveWhenEmptyAfterSec, @announceChannelId)
+                 @requireSameVoiceChannel, @leaveWhenEmptyAfterSec, @announceChannelId, @uploadPermission)
          ON CONFLICT (guild_id) DO UPDATE SET
            dj_role_id = excluded.dj_role_id,
            default_volume = excluded.default_volume,
@@ -83,7 +86,8 @@ export class SettingsStore {
            max_track_duration_sec = excluded.max_track_duration_sec,
            require_same_vc = excluded.require_same_vc,
            leave_after_sec = excluded.leave_after_sec,
-           announce_channel_id = excluded.announce_channel_id`,
+           announce_channel_id = excluded.announce_channel_id,
+           upload_permission = excluded.upload_permission`,
       )
       .run({ guildId, ...settings, requireSameVoiceChannel: settings.requireSameVoiceChannel ? 1 : 0 });
     return settings;

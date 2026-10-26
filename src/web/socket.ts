@@ -17,7 +17,7 @@ const roomFor = (guildId: string) => `guild:${guildId}`;
  */
 export function attachSocket(
   httpServer: HttpServer,
-  { client, players, playlists, settings }: WebContext,
+  { client, players, playlists, library, settings }: WebContext,
   session: RequestHandler,
 ): void {
   const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer);
@@ -51,6 +51,7 @@ export function attachSocket(
   });
   // Only a nudge: the Playlists tab reloads what it shows through the REST API.
   playlists.on("change", (guildId) => io.to(roomFor(guildId)).emit("playlists:update"));
+  library.on("change", (guildId) => io.to(roomFor(guildId)).emit("library:update"));
 }
 
 function toStatus({ positionMs, paused, volume, loopMode, filter }: PlayerSnapshot): PlayerStatus {

@@ -14,7 +14,7 @@ const LOOP_MODES: readonly LoopMode[] = ["off", "track", "queue"];
  * Playback controls for the website. Like slash commands, each one only checks permission, reads its input,
  * and calls PlayerManager. Every route answers with the new state; the page also gets it through the socket.
  */
-export function playerRoutes({ client, players, settings }: WebContext): Router {
+export function playerRoutes({ client, players, library, settings }: WebContext): Router {
   const router = Router();
 
   /** Registers a DJ-only POST/PATCH/DELETE route for one server. */
@@ -36,16 +36,23 @@ export function playerRoutes({ client, players, settings }: WebContext): Router 
   // ---- The queue ----
 
   // { input } adds one link. With `wholePlaylist: true`, a YouTube playlist link queues every song of the playlist.
+  // { fileId } adds a file from the server's library.
   djRoute("post", "/guilds/:id/queue", async ({ guild, user }, req) => {
-    const input = req.body?.input;
-    if (typeof input !== "string" || input.trim() === "") throw new UserError("Paste a link to add.");
-    const request = {
-      input,
+    const voice = {
       requestedBy: { id: user.id, name: user.name, via: "web" as const },
       // The bot joins the voice channel the user is in, like with /play.
       voiceChannelId: guild.voiceStates.cache.get(user.id)?.channelId ?? null,
       textChannelId: null,
     };
+    const fileId = req.body?.fileId;
+    if (typeof fileId === "string") {
+      await library.play(guild.id, fileId, voice);
+      return;
+    }
+
+    const input = req.body?.input;
+    if (typeof input !== "string" || input.trim() === "") throw new UserError("Paste a link to add.");
+    const request = { input, ...voice };
     if (req.body?.wholePlaylist === true) {
       if (!isYoutubePlaylistLink(input)) throw new UserError(`That isn't a YouTube playlist link (one with "list=" in it).`);
       await players.playPlaylistLink(guild.id, request);

@@ -74,7 +74,7 @@ export class GuildPlayer {
    */
   private advanceAfterStuckTrack = false;
 
-  /** How the current track was loaded (Lavalink or yt-dlp), so a playback failure knows what's left to try. */
+  /** How the current track was loaded (Lavalink, yt-dlp or a library file), so a playback failure knows what's left to try. */
   private currentMethod: ResolveMethod | null = null;
   /**
    * Set when Lavalink fails to play the current track but another method can still load it. The
@@ -566,6 +566,7 @@ export class GuildPlayer {
     const { track, method } = await resolvePlayable(this.manager.lavalink, item.source, item.requestedBy, {
       youtubeMode: this.youtubeMode(),
       only: options.method,
+      findLibraryFile: (fileId) => this.manager.libraryFilePath(this.guildId, fileId),
     });
     this.currentMethod = method;
     await this.playTrack(track, options.startAtMs);

@@ -1049,6 +1049,81 @@ code {
   font-weight: 400;
 }
 
+/* The Library tab: upload button and progress, search, and the file list (which reuses the queue's rows). */
+.upload {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.upload .hint {
+  margin: 0;
+}
+
+/* A <label> around a hidden file input, styled like the primary button. */
+.upload-button {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid var(--text);
+  border-radius: 5px;
+  background: var(--text);
+  color: var(--bg);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.upload-button:hover {
+  opacity: 0.85;
+}
+
+.upload-button:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.upload-button.disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.upload-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  font-size: 13px;
+}
+
+.upload-name {
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-status progress {
+  flex: 1;
+  min-width: 120px;
+  height: 6px;
+  accent-color: var(--accent);
+}
+
+.library-search {
+  width: 100%;
+  min-height: 38px;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--card);
+  color: var(--text);
+}
+
 footer {
   margin-top: 24px;
   font-size: 12px;

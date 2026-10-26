@@ -5,6 +5,7 @@ import { AdminPanel } from "./components/AdminPanel";
 import { GuildPicker } from "./components/GuildPicker";
 import { GuildSettingsForm } from "./components/GuildSettingsForm";
 import { HistoryList } from "./components/HistoryList";
+import { LibraryPage } from "./components/LibraryPage";
 import { NowPlaying } from "./components/NowPlaying";
 import { PlaylistsPage } from "./components/PlaylistsPage";
 import { QueueList } from "./components/QueueList";
@@ -15,13 +16,14 @@ import { useGuildState } from "./useGuildState";
  * Which page is showing:
  * - "player": a server's current song, queue and controls;
  * - "playlists": a server's saved playlists;
+ * - "library": a server's uploaded audio files;
  * - "settings": a server's settings (server admins);
  * - "admin": the bot owner's settings and status.
  */
-type View = "player" | "playlists" | "settings" | "admin";
+type View = "player" | "playlists" | "library" | "settings" | "admin";
 /** The pages that belong to one server, shown as tabs. */
 type GuildView = Exclude<View, "admin">;
-const VIEWS: readonly View[] = ["player", "playlists", "settings", "admin"];
+const VIEWS: readonly View[] = ["player", "playlists", "library", "settings", "admin"];
 
 /**
  * The selected server and page live in the URL (?guild=<id>&view=settings), so a page reload or a shared link
@@ -138,8 +140,8 @@ interface DashboardProps {
 }
 
 /**
- * The logged-in view: pick a server, then see (and, as a DJ, control) what's playing there, its playlists, or
- * its settings.
+ * The logged-in view: pick a server, then see (and, as a DJ, control) what's playing there, its playlists, its
+ * library of uploaded files, or its settings.
  */
 function Dashboard({ user, guildId, view, onNavigate }: DashboardProps) {
   const [guilds, setGuilds] = useState<GuildSummary[] | null>(null);
@@ -187,6 +189,7 @@ function Dashboard({ user, guildId, view, onNavigate }: DashboardProps) {
             <nav className="tabs" aria-label="Server pages">
               <TabButton view="player" label="Player" shownView={shownView} onPick={(v) => onNavigate(guild.id, v)} />
               <TabButton view="playlists" label="Playlists" shownView={shownView} onPick={(v) => onNavigate(guild.id, v)} />
+              <TabButton view="library" label="Library" shownView={shownView} onPick={(v) => onNavigate(guild.id, v)} />
               {isAdmin && <TabButton view="settings" label="Settings" shownView={shownView} onPick={(v) => onNavigate(guild.id, v)} />}
             </nav>
           )}
@@ -203,6 +206,7 @@ function Dashboard({ user, guildId, view, onNavigate }: DashboardProps) {
       {shownView === "playlists" && guildId && (
         <PlaylistsPage guildId={guildId} userId={user.id} canControl={canControl} queuedSongs={queuedSongs} />
       )}
+      {shownView === "library" && guild && <LibraryPage guildId={guild.id} level={guild.level} />}
       {shownView === "player" && guildId && !snapshot && connected && <p className="muted">Loading…</p>}
       {shownView === "player" && snapshot && guildId && (
         <main className="player-page">

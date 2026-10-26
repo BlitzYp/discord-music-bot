@@ -2,6 +2,7 @@ import { ChannelType, type Guild, PermissionFlagsBits } from "discord.js";
 import { Router } from "express";
 import { z } from "zod";
 import { UserError } from "../../player/errors.js";
+import { UPLOAD_PERMISSIONS } from "../../shared/library.js";
 import { type GuildSettingsResponse, SETTING_LIMITS } from "../../shared/settings.js";
 import { requireGuildAccess } from "../access.js";
 import { parseBody, route } from "../http.js";
@@ -20,6 +21,7 @@ const guildSettingsChanges = z
     requireSameVoiceChannel: z.boolean(),
     leaveWhenEmptyAfterSec: whole(SETTING_LIMITS.leaveWhenEmptyAfterSec),
     announceChannelId: snowflake.nullable(),
+    uploadPermission: z.enum(UPLOAD_PERMISSIONS),
   })
   .partial()
   .strict();
