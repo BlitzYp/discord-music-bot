@@ -1302,6 +1302,19 @@ footer {
   .section-heading {
     gap: 8px;
   }
+
+  /* "Add a song" has two buttons: give the search box the whole width and put them on a row below it. */
+  .queue-add-song .add-song {
+    flex-wrap: wrap;
+  }
+
+  .queue-add-song .add-song input[type="text"] {
+    flex-basis: 100%;
+  }
+
+  .queue-add-song .add-song button {
+    flex: 1;
+  }
 }
 
 @media (pointer: coarse) {

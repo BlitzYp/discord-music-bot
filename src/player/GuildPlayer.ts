@@ -3,7 +3,7 @@ import type { SavedPlayer } from "../db/playerStateStore.js";
 import { playbackRate } from "../shared/filters.js";
 import { MAX_VOLUME } from "../shared/player.js";
 import type { YoutubeMode } from "../shared/settings.js";
-import type { AudioFilter, LoopMode, PlayerSnapshot, QueueItem } from "../shared/types.js";
+import type { AudioFilter, LoopMode, PlayerSnapshot, QueueItem, QueuePlacement } from "../shared/types.js";
 import { UserError } from "./errors.js";
 import { applyFilter } from "./filters.js";
 import type { PlayerManager } from "./PlayerManager.js";
@@ -161,17 +161,20 @@ export class GuildPlayer {
    * the link a second time when the item plays immediately. Items that wait in the queue are loaded again
    * when their turn comes.
    *
+   * `placement: "next"` puts it in front of the queue instead of at the end.
+   *
    * Returns the item's position: 0 means it is playing now, 1 means it is next, and so on.
    */
-  async enqueue(item: QueueItem, loadedTrack?: Track): Promise<{ position: number }> {
+  async enqueue(item: QueueItem, loadedTrack?: Track, placement: QueuePlacement = "end"): Promise<{ position: number }> {
     if (this.current) {
       const { maxQueueLength } = this.manager.settings.guild(this.guildId);
       if (maxQueueLength !== null && this.queue.length >= maxQueueLength) {
         throw new UserError(`The queue is full (this server's limit is ${maxQueueLength} songs).`);
       }
-      this.queue.push(item);
+      if (placement === "next") this.queue.unshift(item);
+      else this.queue.push(item);
       this.emitQueueUpdate();
-      return { position: this.queue.length };
+      return { position: placement === "next" ? 1 : this.queue.length };
     }
 
     try {
@@ -190,9 +193,10 @@ export class GuildPlayer {
 
   /**
    * Adds several items to the end of the queue (a playlist), as many as the server's `maxQueueLength` allows.
+   * `placement: "next"` puts them in front of the queue instead, keeping their order.
    * If nothing is playing, the first one that loads starts. Returns how many were added; the rest didn't fit.
    */
-  async enqueueMany(items: QueueItem[]): Promise<number> {
+  async enqueueMany(items: QueueItem[], placement: QueuePlacement = "end"): Promise<number> {
     const { maxQueueLength } = this.manager.settings.guild(this.guildId);
     const room = maxQueueLength === null ? Infinity : Math.max(0, maxQueueLength - this.queue.length);
     const nothingPlaying = !this.current;
@@ -202,7 +206,8 @@ export class GuildPlayer {
 
     // When nothing is playing, the first item starts right away instead of waiting, so one more fits.
     const fitting = items.slice(0, nothingPlaying ? room + 1 : room);
-    this.queue.push(...fitting);
+    if (placement === "next") this.queue.unshift(...fitting);
+    else this.queue.push(...fitting);
     if (nothingPlaying) await this.playNext();
     else this.emitQueueUpdate();
     return fitting.length;

@@ -14,15 +14,21 @@ export function AddSong({ guildId }: { guildId: string }) {
   // Spotify albums and playlists always add all of their songs (the server decides that, not a checkbox).
   const isSpotifyCollection = isSpotifyCollectionLink(link);
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
+  /** Adds the song (or playlist) at the end of the queue, or with `next: true` in front of it. */
+  async function add({ next }: { next: boolean }) {
     if (!link.trim()) return;
     await run(async () => {
-      if (isPlaylistLink && wholePlaylist) await api.addWholePlaylistToQueue(guildId, link);
-      else await api.addToQueue(guildId, link);
+      if (isPlaylistLink && wholePlaylist) await api.addWholePlaylistToQueue(guildId, link, { next });
+      else await api.addToQueue(guildId, link, { next });
       setLink(""); // only cleared when it worked, so a typo can be fixed
       setWholePlaylist(false);
     });
+  }
+
+  // Pressing Enter adds to the end of the queue, like the main button.
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    await add({ next: false });
   }
 
   return (
@@ -37,6 +43,14 @@ export function AddSong({ guildId }: { guildId: string }) {
           onChange={(event) => setLink(event.target.value)}
           disabled={pending}
         />
+        <button
+          type="button"
+          title="Add it in front of the queue, so it plays after the current song"
+          disabled={pending || !link.trim()}
+          onClick={() => add({ next: true })}
+        >
+          Play next
+        </button>
         <button type="submit" className="primary" disabled={pending || !link.trim()}>
           {pending ? "Adding…" : "Add to queue"}
         </button>

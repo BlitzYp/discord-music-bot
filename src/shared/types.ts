@@ -36,6 +36,9 @@ export interface QueueItem {
  */
 export type LoopMode = "off" | "track" | "queue";
 
+/** Where new songs go in the queue: at the end, or in front of everything ("Play next" on the website). */
+export type QueuePlacement = "end" | "next";
+
 
 export interface PlayerSnapshot {
   guildId: string;

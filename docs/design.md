@@ -238,7 +238,7 @@ The Player tab puts the current song in a full-width section at the top: artwork
 The bot's Discord status says what it's doing, summed up over all servers (a bot has one status): "Listening to *title – artist*" (or "music in N servers"), "⏸ Paused: *title*", "Waiting for /resume: *title*" after a restart, "Waiting for a song · /play" in voice with an empty queue, or "Idle · /play to start" (with the idle moon). At most one update every 5 seconds. The owner can replace it with a fixed status on the Admin page (`statusOverride`); clearing that brings the automatic one back. Added at the owner's request after milestone 9 (`src/bot/presence.ts`).
 
 ### Slash commands
-`/play <song name|url> [playlist]` · `/play file:<attachment>` · `/playlist …` (see "Playlists") · `/skip` · `/stop` · `/pause` · `/resume` · `/queue` · `/nowplaying` · `/remove <pos>` · `/move <from> <to>` · `/playnow <pos>` · `/shuffle` · `/loop off|track|queue` · `/volume <0-150>` · `/filter <effect>` · `/seek <time>` · `/library list|play|upload|delete` · `/dashboard` (link to the website)
+`/play <song name|url> [playlist] [next]` · `/play file:<attachment> [next]` · `/playlist …` (see "Playlists") · `/skip` · `/stop` · `/pause` · `/resume` · `/queue` · `/nowplaying` · `/remove <pos>` · `/move <from> <to>` · `/playnow <pos>` · `/shuffle` · `/loop off|track|queue` · `/volume <0-150>` · `/filter <effect>` · `/seek <time>` · `/library list|play|upload|delete` · `/dashboard` (link to the website)
 
 `/filter` (added alongside milestone 3, at the owner's request) uses Lavalink's built-in filters: nightcore, vaporwave, bassboost, 8d, karaoke, soft, or off. One effect at a time, kept on the player until changed. The website offers the same list (`AUDIO_FILTERS` in `src/shared/filters.ts`) through `POST /guilds/:id/player/filter { filter }`, which needs DJ permission from milestone 5.
 
@@ -251,7 +251,8 @@ POST   /auth/logout
 GET    /me
 GET    /guilds                     servers the user shares with the bot, with their level
 GET    /guilds/:id/state           (member)
-POST   /guilds/:id/queue           (dj) { input: string, wholePlaylist?: true } | { fileId: string }
+POST   /guilds/:id/queue           (dj) { input: string, wholePlaylist?: true, next?: true } | { fileId: string }
+                                   next: true puts the new songs in front of the queue ("Play next")
 DELETE /guilds/:id/queue/:itemId   (dj)
 PATCH  /guilds/:id/queue/:itemId   (dj) { position: number }    1 = play next
 POST   /guilds/:id/queue/:itemId/play   (dj) play it now, skipping the current track

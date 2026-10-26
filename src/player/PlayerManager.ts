@@ -7,7 +7,7 @@ import type { SettingsStore } from "../db/settingsStore.js";
 import { libraryFilePath } from "../library/paths.js";
 import { formatDuration } from "../shared/format.js";
 import { type AddManyResult, MAX_PLAYLIST_SONGS, type PlaylistPlayMode } from "../shared/playlists.js";
-import type { AudioFilter, LoopMode, PlayerSnapshot, QueueItem, Requester } from "../shared/types.js";
+import type { AudioFilter, LoopMode, PlayerSnapshot, QueueItem, QueuePlacement, Requester } from "../shared/types.js";
 import { UserError } from "./errors.js";
 import { GuildPlayer } from "./GuildPlayer.js";
 import { findSong, listPlaylist, type TrackMetadata } from "./resolvers/index.js";
@@ -34,10 +34,15 @@ export interface PlayRequest {
   voiceChannelId: string | null;
   /** Where the request came from. Used to report errors for this player later. */
   textChannelId: string | null;
+  /** Where the new songs go; at the end of the queue unless said otherwise. */
+  placement?: QueuePlacement;
 }
 
-/** Where the person asking is: their voice channel (to join it) and the text channel (for errors later). */
-export type VoiceRequest = Pick<PlayRequest, "voiceChannelId" | "textChannelId">;
+/**
+ * Where the person asking is: their voice channel (to join it) and the text channel (for errors later), plus where
+ * new songs go in the queue (used when queueing a single item; addMany takes its own mode).
+ */
+export type VoiceRequest = Pick<PlayRequest, "voiceChannelId" | "textChannelId" | "placement">;
 
 /**
  * The one place that controls playback, for every server.
@@ -86,7 +91,7 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
     this.checkDurationLimit(guildId, meta);
     const item: QueueItem = { id: randomUUID(), source, ...meta, requestedBy: request.requestedBy };
 
-    const { position } = await player.run(() => player.enqueue(item, track));
+    const { position } = await player.run(() => player.enqueue(item, track, request.placement));
     return { item, position };
   }
 
@@ -98,7 +103,7 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
     this.checkDurationLimit(guildId, item);
     const player = this.getOrCreatePlayer(guildId);
     await player.run(() => player.ensureConnected(request.voiceChannelId, request.textChannelId));
-    return player.run(() => player.enqueue(item));
+    return player.run(() => player.enqueue(item, /* loadedTrack */ undefined, request.placement));
   }
 
   /**
@@ -126,16 +131,22 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
     const search = { lavalink: this.lavalink, requester: request.requestedBy, youtubeMode: this.settings.global().youtubeMode };
     const { title, entries, notes } = await listPlaylist(request.input, MAX_PLAYLIST_SONGS, search);
     const items = entries.map(({ source, meta }) => ({ id: randomUUID(), source, ...meta, requestedBy: request.requestedBy }));
-    const result = await this.addMany(guildId, items, request, "append");
+    const result = await this.addMany(guildId, items, request, request.placement === "next" ? "next" : "append");
     return { title, result, notes };
   }
 
   /**
    * Queues several items at once (a saved playlist, or every song of a playlist link). "replace" stops the
-   * current track and empties the queue first; "append" adds to the end. Joins the requester's voice channel if
-   * needed. Songs over the server's length limit, or past its queue limit, are left out and counted.
+   * current track and empties the queue first; "append" adds to the end; "next" adds in front of the queue
+   * ("Play next" on the website). Joins the requester's voice channel if needed. Songs over the server's length
+   * limit, or past its queue limit, are left out and counted.
    */
-  async addMany(guildId: string, items: QueueItem[], request: VoiceRequest, mode: PlaylistPlayMode): Promise<AddManyResult> {
+  async addMany(
+    guildId: string,
+    items: QueueItem[],
+    request: VoiceRequest,
+    mode: PlaylistPlayMode | "next",
+  ): Promise<AddManyResult> {
     const allowed = items.filter((item) => !this.isTooLong(guildId, item.durationMs));
     const tooLong = items.length - allowed.length;
     if (allowed.length === 0) {
@@ -146,7 +157,7 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
     const added = await player.run(async () => {
       if (mode === "replace") return player.replaceQueue(allowed, request.voiceChannelId, request.textChannelId);
       await player.ensureConnected(request.voiceChannelId, request.textChannelId);
-      return player.enqueueMany(allowed);
+      return player.enqueueMany(allowed, mode === "next" ? "next" : "end");
     });
     return { added, tooLong, queueFull: allowed.length - added };
   }

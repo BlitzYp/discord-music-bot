@@ -71,13 +71,19 @@ export function fetchGuilds(): Promise<GuildSummary[]> {
 
 type State = Promise<PlayerSnapshot>;
 
-export const addToQueue = (guildId: string, input: string): State => request("POST", `/guilds/${guildId}/queue`, { input });
+/** `next: true` puts the new songs in front of the queue ("Play next") instead of at the end. */
+interface AddOptions {
+  next?: boolean;
+}
+
+export const addToQueue = (guildId: string, input: string, options: AddOptions = {}): State =>
+  request("POST", `/guilds/${guildId}/queue`, { input, ...options });
 /** Queues a file from the server's library. */
 export const addLibraryFileToQueue = (guildId: string, fileId: string): State =>
   request("POST", `/guilds/${guildId}/queue`, { fileId });
 /** Queues every song of a YouTube playlist link (up to 500). Spotify album and playlist links do this with addToQueue too. */
-export const addWholePlaylistToQueue = (guildId: string, input: string): State =>
-  request("POST", `/guilds/${guildId}/queue`, { input, wholePlaylist: true });
+export const addWholePlaylistToQueue = (guildId: string, input: string, options: AddOptions = {}): State =>
+  request("POST", `/guilds/${guildId}/queue`, { input, wholePlaylist: true, ...options });
 export const removeFromQueue = (guildId: string, itemId: string): State =>
   request("DELETE", `/guilds/${guildId}/queue/${itemId}`);
 /** `position` is 1-based, like the numbers in the list: 1 = play next. */

@@ -19,6 +19,9 @@ export const play: Command = {
     )
     .addBooleanOption((o) =>
       o.setName("playlist").setDescription("YouTube playlist links: queue the whole playlist (up to 500). Spotify albums/playlists always do."),
+    )
+    .addBooleanOption((o) =>
+      o.setName("next").setDescription("Put it at the front of the queue, so it plays after the current song"),
     ),
 
   async execute(interaction, ctx) {
@@ -77,10 +80,14 @@ function requesterOf(interaction: GuildCommandInteraction) {
   return { id: interaction.user.id, name: interaction.member.displayName, via: "discord" as const };
 }
 
-/** The requester's voice channel (to join it) and this text channel (for errors later). */
+/**
+ * The requester's voice channel (to join it), this text channel (for errors later), and where the new songs go:
+ * at the front of the queue with `next: True`, otherwise at the end.
+ */
 function voiceOf(interaction: GuildCommandInteraction) {
   return {
     voiceChannelId: interaction.guild.voiceStates.cache.get(interaction.user.id)?.channelId ?? null,
     textChannelId: interaction.channelId,
+    placement: interaction.options.getBoolean("next") ? ("next" as const) : ("end" as const),
   };
 }
