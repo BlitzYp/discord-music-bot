@@ -25,6 +25,7 @@ The full design of the bot: decisions, how each part should work, and the planne
 | Hosting | Owner's home machine (Windows); Tailscale Funnel for a public HTTPS URL; the owner starts everything by hand (no background service) |
 | Text search | YouTube Music first, then YouTube (Lavalink's plugin), or yt-dlp; the first result's link is queued |
 | Spotify links | Read from Spotify's public embed page (no keys); each song is played as a YouTube search |
+| Text-to-speech | Piper, offline, on the owner's PC; the speech is a WAV file Lavalink plays like a library file |
 
 ## Architecture
 
@@ -230,6 +231,13 @@ POST   /guilds/:id/playlists/from-queue               (dj) { name }
 - Measurements are cached per song in SQLite, shared by all servers. A song waits at most 3 s for its measurement; the next queued song is measured ahead. Tested 2026-10-27: about 1 s per song through the YouTube plugin's stream endpoint, 0.1 s for a library file.
 - Not measured (played unadjusted): livestreams, and links only Lavalink can read (SoundCloud and Twitch through Lavalink).
 
+## Announcements (text-to-speech, added after milestone 9, at the owner's request)
+- DJs type something and the bot says it in the voice channel: `/announce <text>` and the **Announce** box on the website's Player tab. At most 300 characters; one announcement at a time per server.
+- **Voice: Piper** (offline neural text-to-speech; `npm run setup:piper` puts it in `bin/piper/`). Chosen over the built-in Windows voices (robotic), free online voices through a Lavalink plugin (the text leaves the PC, and they break like the YouTube plugin does) and paid services (keys, costs). The Windows program comes from Piper's 2023.11.14-2 release, the last one with a ready-made `.exe`; newer versions are only a Python package. One voice for now, `en_US-lessac-medium`.
+- **Same voice path:** Piper writes a WAV file to `data/tts/`, Lavalink plays it through its local source, and the file is deleted afterwards.
+- **The song pauses for it:** Lavalink plays one track per server, so it can't speak over the music. The speech replaces the song, then the song continues from the same spot (still paused, if it was). The effect and the normalization volume are switched off while it speaks and come back with the song. Other controls (skip, seek, …) wait until the song is back. With nothing playing, the bot just speaks, joining the DJ's voice channel if needed.
+- Planned next (not built): automatic announcements, switched on per server, such as "Now playing …" before a song, a playlist starting, or a welcome when someone joins the voice channel; a choice of voices.
+
 ## Real-time (Socket.IO, built in milestone 4)
 - The client sends `guild:watch <id>` and joins the room `guild:<id>`. From milestone 5, the server first checks that the logged-in user is a member of that server.
 - Server → client: `state` (full snapshot on join), `queue:update`, `track:start`, `track:end`, `player:update` (position, paused, volume, loop mode, filter; about once per second while playing), `error`, `playlists:update` (milestone 7), `library:update` (milestone 8). The types live in `src/shared/types.ts`.
@@ -246,7 +254,7 @@ The Player tab puts the current song in a full-width section at the top: artwork
 The bot's Discord status says what it's doing, summed up over all servers (a bot has one status): "Listening to *title – artist*" (or "music in N servers"), "⏸ Paused: *title*", "Waiting for /resume: *title*" after a restart, "Waiting for a song · /play" in voice with an empty queue, or "Idle · /play to start" (with the idle moon). At most one update every 5 seconds. The owner can replace it with a fixed status on the Admin page (`statusOverride`); clearing that brings the automatic one back. Added at the owner's request after milestone 9 (`src/bot/presence.ts`).
 
 ### Slash commands
-`/play <song name|url> [playlist] [next]` · `/play file:<attachment> [next]` · `/playlist …` (see "Playlists") · `/skip` · `/stop` · `/pause` · `/resume` · `/queue` · `/nowplaying` · `/remove <pos>` · `/move <from> <to>` · `/playnow <pos>` · `/shuffle` · `/loop off|track|queue` · `/volume <0-150>` · `/filter <effect>` · `/normalize on|off` · `/seek <time>` · `/library list|play|upload|delete` · `/dashboard` (link to the website)
+`/play <song name|url> [playlist] [next]` · `/play file:<attachment> [next]` · `/playlist …` (see "Playlists") · `/skip` · `/stop` · `/pause` · `/resume` · `/queue` · `/nowplaying` · `/remove <pos>` · `/move <from> <to>` · `/playnow <pos>` · `/shuffle` · `/loop off|track|queue` · `/volume <0-150>` · `/filter <effect>` · `/normalize on|off` · `/announce <text>` · `/seek <time>` · `/library list|play|upload|delete` · `/dashboard` (link to the website)
 
 `/filter` (added alongside milestone 3, at the owner's request) uses Lavalink's built-in filters: nightcore, vaporwave, bassboost, 8d, karaoke, soft, or off. One effect at a time, kept on the player until changed. The website offers the same list (`AUDIO_FILTERS` in `src/shared/filters.ts`) through `POST /guilds/:id/player/filter { filter }`, which needs DJ permission from milestone 5.
 
@@ -273,6 +281,7 @@ POST   /guilds/:id/player/volume   (dj) { volume }
 POST   /guilds/:id/player/loop     (dj) { mode }
 POST   /guilds/:id/player/filter   (dj) { filter }
 POST   /guilds/:id/player/normalize (dj) { enabled: boolean }   volume normalization, a server setting
+POST   /guilds/:id/player/announce  (dj) { text }               says it in voice (text-to-speech); answers once it's been said
 ```
 Built in milestone 6 (`GET /me` also gained `isOwner`, and DJ routes enforce `requireSameVoiceChannel`):
 ```

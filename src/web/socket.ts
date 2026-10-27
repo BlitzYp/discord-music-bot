@@ -54,6 +54,6 @@ export function attachSocket(
   library.on("change", (guildId) => io.to(roomFor(guildId)).emit("library:update"));
 }
 
-function toStatus({ positionMs, paused, volume, loopMode, filter, normalizeVolume }: PlayerSnapshot): PlayerStatus {
-  return { positionMs, paused, volume, loopMode, filter, normalizeVolume };
+function toStatus({ positionMs, paused, announcing, volume, loopMode, filter, normalizeVolume }: PlayerSnapshot): PlayerStatus {
+  return { positionMs, paused, announcing, volume, loopMode, filter, normalizeVolume };
 }

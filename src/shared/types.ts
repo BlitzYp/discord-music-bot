@@ -51,6 +51,8 @@ export interface PlayerSnapshot {
    * Resume button) or /play continues it from `positionMs`, in the voice channel of whoever does it.
    */
   interrupted: boolean;
+  /** An announcement (/announce) is being spoken; `current` waits, paused at `positionMs`, and continues afterwards. */
+  announcing: boolean;
   volume: number;
   loopMode: LoopMode;
   filter: AudioFilter;
@@ -62,7 +64,7 @@ export interface PlayerSnapshot {
 }
 
 /** The part of a snapshot that changes without the queue changing. Sent about once a second while playing. */
-export type PlayerStatus = Pick<PlayerSnapshot, "positionMs" | "paused" | "volume" | "loopMode" | "filter" | "normalizeVolume">;
+export type PlayerStatus = Pick<PlayerSnapshot, "positionMs" | "paused" | "announcing" | "volume" | "loopMode" | "filter" | "normalizeVolume">;
 
 // -------------------------------------------------------------------------------------------------
 // Web API and Socket.IO

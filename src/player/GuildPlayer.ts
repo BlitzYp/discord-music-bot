@@ -41,6 +41,22 @@ export interface InterruptedPlayback {
   textChannelId: string | null;
 }
 
+/** An announcement being spoken. See `GuildPlayer.announce()`. */
+interface ActiveAnnouncement {
+  /** The speech track, to recognise its end among Lavalink's events. */
+  speech: Track;
+  /** Ends the wait in `announce()`: the speech ended, or the bot left voice. */
+  finished: () => void;
+  /** The song that was playing, to continue from the same spot afterwards. */
+  song: { track: Track; atMs: number; paused: boolean } | null;
+}
+
+/**
+ * How much longer than the speech itself an announcement may take before the song continues anyway, in case
+ * Lavalink never reports the speech's end.
+ */
+const ANNOUNCEMENT_GRACE_MS = 10_000;
+
 export { MAX_VOLUME };
 /** How many recently played items to remember. */
 const HISTORY_SIZE = 20;
@@ -105,6 +121,9 @@ export class GuildPlayer {
    * "volume" filter, which multiplies with the player's volume, so /volume keeps working the same.
    */
   private songGain = 1;
+
+  /** Set while an announcement is being spoken (see `announce()`). */
+  private announcement: ActiveAnnouncement | null = null;
 
   constructor(
     readonly guildId: string,
@@ -391,6 +410,84 @@ export class GuildPlayer {
   }
 
   // ---------------------------------------------------------------------------------------------
+  // Announcements (text-to-speech)
+  // ---------------------------------------------------------------------------------------------
+
+  get isAnnouncing(): boolean {
+    return this.announcement !== null;
+  }
+
+  /**
+   * Speaks an announcement (`speech`, a track loaded from a speech file) in voice. Lavalink plays one track at a time,
+   * so the song pauses: the speech plays over it, and afterwards the song continues from the same spot (still paused,
+   * if it was). Joins the given voice channel first if needed.
+   *
+   * Returns only once the speech has ended. Because this runs inside `run()`, a /skip or /seek that arrives meanwhile
+   * waits until the song is back, instead of acting on the speech.
+   *
+   * Lavalink reports the speech's end through `onAnnouncementEnded()`, which PlayerManager calls directly, not through
+   * `run()`: through `run()` it would wait for this task, which waits for it.
+   */
+  async announce(speech: Track, voiceChannelId: string | null, textChannelId: string | null): Promise<void> {
+    // After a restart, this also continues the interrupted song, so it can continue after the speech too.
+    const player = await this.ensureConnected(voiceChannelId, textChannelId);
+
+    const playing = player.queue.current;
+    const song = this.current && playing ? { track: playing, atMs: this.songPositionMs(), paused: player.paused } : null;
+    let finished!: () => void;
+    const ended = new Promise<void>((resolve) => (finished = resolve));
+    this.announcement = { speech, finished, song };
+    this.emitPlayerUpdate();
+
+    try {
+      // Without this, the effect would change the voice too (nightcore makes it a chipmunk), and the song's
+      // normalization volume would make it louder or quieter. Both come back with the song.
+      await applyFilter(player, "off");
+      await player.play({ clientTrack: speech, paused: false, position: 0 });
+      const speechMs = speech.info.duration ?? 0;
+      let timer: NodeJS.Timeout | undefined;
+      const tooLong = new Promise<void>((resolve) => (timer = setTimeout(resolve, speechMs + ANNOUNCEMENT_GRACE_MS)));
+      await Promise.race([ended, tooLong]);
+      clearTimeout(timer);
+    } finally {
+      this.announcement = null;
+      await this.continueAfterAnnouncement(song);
+      this.emitPlayerUpdate();
+    }
+  }
+
+  /**
+   * Called (directly, see `announce()`) when Lavalink reports that a track ended while an announcement is on.
+   * Returns true if it was the speech, which ends the announcement; false for any other track (the song the speech
+   * replaced), whose end then goes through `onTrackEnded()` as usual.
+   */
+  onAnnouncementEnded(endedTrack: { encoded?: string } | null): boolean {
+    const announcement = this.announcement;
+    if (!announcement || endedTrack?.encoded !== announcement.speech.encoded) return false;
+    announcement.finished();
+    return true;
+  }
+
+  /** Puts the effect and the song back after an announcement. If the bot left voice meanwhile, there's nothing to do. */
+  private async continueAfterAnnouncement(song: ActiveAnnouncement["song"]): Promise<void> {
+    const player = this.lavalinkPlayer;
+    if (!player?.connected) return;
+
+    await applyFilter(player, this.filter);
+    await this.applySongGain(player);
+    if (song && this.current) {
+      // The same Lavalink track again: no need to load the link a second time. A stream can't jump to a position;
+      // it picks up live again.
+      const atMs = song.track.info.isSeekable ? song.atMs : 0;
+      await player.play({ clientTrack: song.track, paused: song.paused, position: atMs });
+      this.speedAnchor = { lavalinkMs: atMs, songMs: atMs };
+    } else if (player.queue.current) {
+      // Nothing to go back to. Normally the speech has finished by now; this only stops one that ran too long.
+      await player.stopPlaying(/* clearQueue */ false, /* executeAutoplay */ false);
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------------
   // Editing the queue
   // ---------------------------------------------------------------------------------------------
 
@@ -487,6 +584,8 @@ export class GuildPlayer {
 
   /** Called when Lavalink reports that the current track stopped producing audio. See `advanceAfterStuckTrack`. */
   onTrackStuck(): void {
+    // A stuck announcement isn't the song's problem: Lavalink stops it, which ends the announcement.
+    if (this.announcement) return;
     this.advanceAfterStuckTrack = true;
   }
 
@@ -496,6 +595,7 @@ export class GuildPlayer {
    * Returns true if the error should be reported.
    */
   onTrackError(): boolean {
+    if (this.announcement) return true; // the speech failed, not the song (PlayerManager words the error)
     if (!this.current || !this.currentMethod) return true;
     const method = fallbackMethod(this.current.source, this.currentMethod, this.youtubeMode());
     if (!method) return true;
@@ -514,6 +614,8 @@ export class GuildPlayer {
     this.interrupted = null;
     this.advanceAfterStuckTrack = false;
     this.pendingRetry = null;
+    // The bot left voice mid-announcement: stop waiting for the speech to end.
+    this.announcement?.finished();
     this.emitQueueUpdate();
   }
 
@@ -549,6 +651,7 @@ export class GuildPlayer {
       positionMs: interrupted ? interrupted.positionMs : this.current ? this.songPositionMs() : 0,
       paused: interrupted ? true : (player?.paused ?? false),
       interrupted: interrupted !== null,
+      announcing: this.announcement !== null,
       volume: interrupted?.volume ?? player?.volume ?? this.manager.settings.guild(this.guildId).defaultVolume,
       loopMode: this.loopMode,
       filter: this.filter,
@@ -685,6 +788,8 @@ export class GuildPlayer {
 
   /** Where the current song is, in song time (see `speedAnchor`), kept between 0 and its length. */
   private songPositionMs(): number {
+    // During an announcement Lavalink's position is the speech's; the song waits where it was.
+    if (this.announcement?.song) return this.announcement.song.atMs;
     const lavalinkMs = this.lavalinkPlayer?.position ?? 0;
     const songMs = this.speedAnchor.songMs + (lavalinkMs - this.speedAnchor.lavalinkMs) * playbackRate(this.filter);
     return Math.max(0, Math.min(songMs, this.current?.durationMs ?? Infinity));

@@ -16,6 +16,7 @@ import { LoudnessCache } from "./player/LoudnessCache.js";
 import { PlayerManager } from "./player/PlayerManager.js";
 import { clearDownloads, updateYtDlp } from "./player/resolvers/ytdlp.js";
 import { PlaylistManager } from "./playlists/PlaylistManager.js";
+import { clearSpeechFiles } from "./tts/speech.js";
 import { startWebServer } from "./web/server.js";
 
 // Startup order: config → db → Lavalink → bot → web
@@ -23,6 +24,7 @@ const db = openDatabase();
 const settings = new SettingsStore(db);
 
 await clearDownloads();
+await clearSpeechFiles();
 if (settings.global().ytdlpAutoUpdate) {
   // YouTube changes often break old yt-dlp versions. Updating runs in the background so startup isn't delayed.
   updateYtDlp()

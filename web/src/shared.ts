@@ -4,6 +4,7 @@ export { formatDuration } from "../../src/shared/format";
 export { AUDIO_FILTERS, FILTER_DESCRIPTIONS, playbackRate } from "../../src/shared/filters";
 export { hasLevel, type PermissionLevel } from "../../src/shared/permissions";
 export { MAX_VOLUME } from "../../src/shared/player";
+export { MAX_ANNOUNCEMENT_LENGTH } from "../../src/shared/announcements";
 export {
   BOT_STATUS_DOTS,
   BOT_STATUS_TYPES,

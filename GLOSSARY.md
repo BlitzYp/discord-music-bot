@@ -36,6 +36,10 @@ _Avoid_: filter
 Playing every song at about the same loudness, so a loud song after a quiet one isn't a jolt. Each server switches it on or off; it isn't an Effect and works alongside one.
 _Avoid_: audio normalization, loudness normalization, effect
 
+**Announcement**:
+Something a DJ types that the bot says aloud in the voice channel (text-to-speech). Now playing pauses for it and then carries on.
+_Avoid_: TTS message, broadcast
+
 ### Playlists
 
 **Playlist**:

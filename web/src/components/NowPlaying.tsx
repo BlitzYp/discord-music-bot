@@ -37,7 +37,9 @@ export function NowPlaying({ guildId, snapshot, receivedAt, canControl }: Props)
   // The bot sends the position about once a second; in between, count up from the last value.
   // Nightcore and vaporwave play the song faster or slower, so the bar has to move faster or slower too.
   // The local clock can tick just before a new snapshot arrives: never count backwards from that update.
-  const elapsedSinceUpdate = snapshot.paused ? 0 : Math.max(0, now - receivedAt) * playbackRate(snapshot.filter);
+  // During an announcement the song waits where it was.
+  const songIsMoving = !snapshot.paused && !snapshot.announcing;
+  const elapsedSinceUpdate = !songIsMoving ? 0 : Math.max(0, now - receivedAt) * playbackRate(snapshot.filter);
   const position = Math.min(snapshot.positionMs + elapsedSinceUpdate, item.durationMs ?? Infinity);
 
   return (
@@ -48,8 +50,14 @@ export function NowPlaying({ guildId, snapshot, receivedAt, canControl }: Props)
         <div className="details">
           <div className="now-playing-heading">
             <p className="label">Now playing</p>
-            <span className="playback-state" data-playing={!snapshot.paused && !snapshot.interrupted}>
-              {snapshot.interrupted ? "Paused after restart" : snapshot.paused ? "Paused" : "Playing"}
+            <span className="playback-state" data-playing={songIsMoving && !snapshot.interrupted}>
+              {snapshot.interrupted
+                ? "Paused after restart"
+                : snapshot.announcing
+                  ? "Paused for an announcement"
+                  : snapshot.paused
+                    ? "Paused"
+                    : "Playing"}
             </span>
           </div>
           <h2 className="title">

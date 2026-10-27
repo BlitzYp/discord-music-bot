@@ -12,7 +12,8 @@
     "lavalink": "node scripts/lavalink.mjs",
     "funnel": "node scripts/funnel.mjs",
     "setup:lavalink": "node scripts/download-lavalink.mjs",
-    "setup:ytdlp": "node scripts/download-ytdlp.mjs"
+    "setup:ytdlp": "node scripts/download-ytdlp.mjs",
+    "setup:piper": "node scripts/download-piper.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

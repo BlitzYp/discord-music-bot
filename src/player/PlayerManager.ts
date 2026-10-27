@@ -8,10 +8,12 @@ import { libraryFilePath } from "../library/paths.js";
 import { formatDuration } from "../shared/format.js";
 import { type AddManyResult, MAX_PLAYLIST_SONGS, type PlaylistPlayMode } from "../shared/playlists.js";
 import type { AudioFilter, LoopMode, PlayerSnapshot, QueueItem, QueuePlacement, Requester } from "../shared/types.js";
+import { cleanAnnouncementText, deleteSpeechFile, synthesizeSpeech } from "../tts/speech.js";
 import { UserError } from "./errors.js";
 import { GuildPlayer } from "./GuildPlayer.js";
 import type { LoudnessCache } from "./LoudnessCache.js";
 import { findSong, listPlaylist, type TrackMetadata } from "./resolvers/index.js";
+import { loadFileWithLavalink } from "./resolvers/lavalink.js";
 
 /**
  * Events PlayerManager emits whenever something changes. The bot posts "error" in Discord;
@@ -56,6 +58,8 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
   private readonly players = new Map<string, GuildPlayer>();
   /** Servers where the bot is alone in voice, and the timer that will make it leave. */
   private readonly leaveTimers = new Map<string, NodeJS.Timeout>();
+  /** Servers where an announcement is being made (from making the speech until it has been spoken). */
+  private readonly announcingIn = new Set<string>();
   /** Turned off while shutting down, so leaving voice doesn't save every server as "nothing playing". */
   private saving = true;
 
@@ -163,6 +167,30 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
       return player.enqueueMany(allowed, mode === "next" ? "next" : "end");
     });
     return { added, tooLong, queueFull: allowed.length - added };
+  }
+
+  /**
+   * Speaks `text` in voice (text-to-speech), pausing the song for it; the song then continues from the same spot.
+   * Joins the requester's voice channel first if needed. Returns once the announcement has been spoken.
+   * One announcement at a time per server: another one is refused until it's over.
+   */
+  async announce(guildId: string, text: string, announcedBy: Requester, request: VoiceRequest): Promise<void> {
+    const cleaned = cleanAnnouncementText(text);
+    if (this.announcingIn.has(guildId)) throw new UserError("Wait for the current announcement to finish.");
+    this.announcingIn.add(guildId);
+
+    let speechPath: string | null = null;
+    try {
+      const player = this.getOrCreatePlayer(guildId);
+      // Join voice before making the speech, so "join a voice channel first" comes back immediately.
+      await player.run(() => player.ensureConnected(request.voiceChannelId, request.textChannelId));
+      speechPath = await synthesizeSpeech(cleaned);
+      const speech = await loadFileWithLavalink(this.lavalink, speechPath, announcedBy);
+      await player.run(() => player.announce(speech, request.voiceChannelId, request.textChannelId));
+    } finally {
+      this.announcingIn.delete(guildId);
+      if (speechPath) await deleteSpeechFile(speechPath);
+    }
   }
 
   /** Skips the current track. Returns the skipped item, or null if nothing was playing. */
@@ -278,6 +306,7 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
       positionMs: 0,
       paused: false,
       interrupted: false,
+      announcing: false,
       volume: this.settings.guild(guildId).defaultVolume,
       loopMode: "off",
       filter: "off",
@@ -399,11 +428,14 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
 
     // A track ended. lavalink-client reports this as "queueEnd" rather than "trackEnd", because we never put
     // anything in its own queue (see GuildPlayer). The payload's `reason` says why the track ended.
-    this.lavalink.on("queueEnd", (lavalinkPlayer, _track, payload) => {
+    this.lavalink.on("queueEnd", (lavalinkPlayer, track, payload) => {
       if (payload.type !== "TrackEndEvent") return;
       const guildId = lavalinkPlayer.guildId;
       const player = this.players.get(guildId);
       if (!player) return;
+
+      // An announcement's speech ended. Not through run(): the announcement is the task run() is waiting on.
+      if (player.onAnnouncementEnded(track)) return;
 
       player.run(() => player.onTrackEnded(payload.reason)).catch((error) => this.emit("error", guildId, null, error));
     });
@@ -429,6 +461,10 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
       if (!shouldReport) return;
 
       const reason = "exception" in payload ? payload.exception?.message : undefined;
+      if (player?.isAnnouncing) {
+        this.emit("error", guildId, null, new Error(`The announcement couldn't be played: ${reason ?? "unknown error"}`));
+        return;
+      }
       const error = new Error(reason ?? `Track failed: ${track?.info.title ?? "unknown"}`);
       this.emit("error", guildId, player?.current ?? null, error);
     });

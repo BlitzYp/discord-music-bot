@@ -49,6 +49,7 @@ His name, avatar and bio are set in the [Discord Developer Portal](https://disco
 | `/loop off\|track\|queue` | Repeats nothing, the current track, or the whole queue |
 | `/volume [percent]` | Shows or sets the volume, 0–150% (100 is normal). Goes back to the server's starting volume when the bot leaves. |
 | `/normalize on\|off` | Volume normalization, like Spotify's "Normalize volume": every song plays at about the same loudness, so a loud song after a quiet one isn't a shock. Stays on for the server (also after restarts) until switched off. Needs ffmpeg. |
+| `/announce <text>` | Says the text in your voice channel (text-to-speech, up to 300 characters). The song pauses while the bot speaks, then carries on from the same spot. The website's Player tab has the same thing: the **Announce** box. Needs Piper (`npm run setup:piper`). |
 | `/filter <effect>` | Adds an audio effect: nightcore, vaporwave, bassboost, 8d, karaoke or soft (`off` removes it). One at a time; it stays on for the next songs until changed or the bot leaves. |
 | `/playlist ...` | This server's saved playlists; see below |
 | `/library ...` | This server's uploaded audio files; see below |
@@ -120,9 +121,11 @@ winget install OpenJS.NodeJS.LTS EclipseAdoptium.Temurin.21.JDK Gyan.FFmpeg
 npm install
 npm run setup:lavalink
 npm run setup:ytdlp
+npm run setup:piper
 ```
 
 - `setup:lavalink` downloads `lavalink/Lavalink.jar`. Lavalink downloads its YouTube plugin by itself the first time it starts.
+- `setup:piper` downloads Piper, the offline text-to-speech program behind `/announce`, into `bin/piper/` (about 85 MB with its voice). Nothing you type for announcements leaves your PC. Other voices can be downloaded with `npm run setup:piper -- <voice>` (listen to them at [piper-samples](https://rhasspy.github.io/piper-samples/)), but the bot only uses `en_US-lessac-medium` for now.
 - `setup:ytdlp` downloads yt-dlp into `bin/`. The bot updates it on every start, because YouTube changes often break old versions. (A system-wide yt-dlp also works if `bin/` has none.)
 
 ### 3. Create the Discord application
@@ -239,6 +242,7 @@ Other scripts:
 - **New slash commands don't show up**: the Discord app caches the command list. Press **Ctrl+R** in Discord to reload it (or fully quit and reopen it). If they're still missing, check the bot's console for `registered N global commands`. Setting `DEV_GUILD_ID` makes updates instant in that one server.
 - **"YouTube refused to play this video"** (the title loads, then playback fails): YouTube regularly blocks the clients Lavalink's YouTube plugin pretends to be. The bot's console shows which clients failed and why. The usual fix is a newer plugin version in `lavalink/application.yml` (see [youtube-source releases](https://github.com/lavalink-devs/youtube-source/releases)), or changing the order of `clients` there, then restarting Lavalink. The comments in that file record what was tested last.
 - **"yt-dlp isn't installed"**: run `npm run setup:ytdlp`.
+- **"Text-to-speech isn't set up on the bot's computer"**: run `npm run setup:piper`. If it's set up and announcements still fail, the bot's console shows Piper's own error after `[tts] Piper failed:`.
 - **Some songs take ~10 seconds to start**: those are being downloaded with yt-dlp because Lavalink couldn't load them. The console shows `[resolver] lavalink couldn't load ...` or `[player] lavalink couldn't play ...` with the reason.
 - **An error starting with "yt-dlp:"**: yt-dlp couldn't get the song either; its message usually says why (private video, region-locked, removed). If YouTube songs that should work fail this way, restart the bot so it updates yt-dlp.
 - **The website doesn't load**: check the bot's console. `[web] website running at ...` means it's up; `[web] the website couldn't start` says why (often another program already uses port 3000; change `WEB_PORT` in `.env`). The Discord side keeps working either way.
@@ -304,6 +308,8 @@ src/
     resolvers/          Turns a link into a track Lavalink can play (through Lavalink, or a yt-dlp download); reads Spotify links
     filters.ts          Applies the audio effects (the list itself is in src/shared/filters.ts)
     errors.ts           UserError: errors whose message is shown to users
+  tts/
+    speech.ts           Text-to-speech for /announce: runs Piper to turn text into a WAV file
   playlists/
     PlaylistManager.ts  Saved playlists: create, edit, import from YouTube, play (both /playlist and the website use it)
   library/

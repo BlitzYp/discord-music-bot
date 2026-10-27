@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import * as api from "./api";
 import { AddSong } from "./components/AddSong";
 import { AdminPanel } from "./components/AdminPanel";
+import { Announce } from "./components/Announce";
 import { GuildPicker } from "./components/GuildPicker";
 import { GuildSettingsForm } from "./components/GuildSettingsForm";
 import { HistoryList } from "./components/HistoryList";
@@ -218,6 +219,7 @@ function Dashboard({ user, guildId, view, onNavigate }: DashboardProps) {
           {guild && !canControl && (
             <p className="muted hint member-hint">Only DJs can control playback. A server admin can choose the DJ role in Settings.</p>
           )}
+          {canControl && <Announce guildId={guildId} announcing={snapshot.announcing} />}
           <div className="player-lists">
             <QueueList guildId={guildId} queue={snapshot.queue} canControl={canControl}>
               {canControl && <AddSong guildId={guildId} />}

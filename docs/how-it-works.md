@@ -130,6 +130,20 @@ Like Spotify's "Normalize volume": with the server's `normalizeVolume` setting o
 
 Tests (`npm test`): `loudness.test.ts` covers the gain and reading ffmpeg's output (with real ffmpeg output), `LoudnessCache.test.ts` the cache. Applying the gain in `GuildPlayer` isn't covered by tests; check it by ear in Discord.
 
+### Announcements (text-to-speech)
+
+`/announce <text>` and the website's **Announce** box both call `PlayerManager.announce()`:
+
+1. `cleanAnnouncementText()` (`src/tts/speech.ts`) turns line breaks and repeated spaces into single spaces and checks the length (300 characters, `MAX_ANNOUNCEMENT_LENGTH` in `src/shared/announcements.ts`). `PlayerManager.announcingIn` refuses a second announcement in the same server until the first is over.
+2. The bot joins the DJ's voice channel if needed. Then `synthesizeSpeech()` runs Piper (`bin/piper/piper.exe`, with the text on its stdin) to write `data/tts/<random id>.wav`, and Lavalink loads it like a library file.
+3. `GuildPlayer.announce()`, inside `run()`, remembers the song (its Lavalink track, position, and whether it was paused), switches the effect off (nightcore would make the voice squeaky; this also drops the normalization volume) and plays the speech over the song. Lavalink ends the song with reason `replaced`, which `onTrackEnded()` ignores as usual.
+4. It then waits for the speech to end. Lavalink's end event for the speech goes to `GuildPlayer.onAnnouncementEnded()` **directly, not through `run()`**: `run()` is busy with the announcement itself, so the event would wait for the announcement, which waits for the event. The speech is told apart from the song by its `encoded` track id. If no end event comes within the speech's length + 10 seconds, the song continues anyway.
+5. `continueAfterAnnouncement()` puts the effect and the song's gain back and plays the remembered track from the remembered position. Then the WAV file is deleted (`clearSpeechFiles()` also empties `data/tts/` on every start).
+
+Because steps 3 to 5 are one `run()` task, a /skip or /seek that arrives during the speech waits, then acts on the song. While it speaks, `songPositionMs()` returns the remembered position and the snapshot's `announcing` is true, so the website's progress bar stands still and says "Paused for an announcement". `onTrackError()` and `onTrackStuck()` leave the song alone during an announcement; a speech that fails is reported as "The announcement couldn't be played". If the bot is disconnected mid-speech, `reset()` ends the wait.
+
+Tests: `src/tts/speech.test.ts` covers `cleanAnnouncementText()`. Piper itself and the pause-and-continue in `GuildPlayer` are checked by ear in Discord.
+
 ### `run()`: one change at a time
 
 Every change to a `GuildPlayer` goes through `player.run(() => ...)`. That waits for the previous change in that server to finish before starting the next one. Without it, a `/skip` arriving at the same moment a track ends by itself could advance the queue twice.

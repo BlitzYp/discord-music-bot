@@ -112,6 +112,9 @@ export const setNormalizeVolume = (guildId: string, enabled: boolean): State =>
   request("POST", `/guilds/${guildId}/player/normalize`, { enabled });
 export const setFilter = (guildId: string, filter: AudioFilter): State =>
   request("POST", `/guilds/${guildId}/player/filter`, { filter });
+/** Says `text` in voice (text-to-speech). Answers once it has been said. */
+export const announce = (guildId: string, text: string): State =>
+  request("POST", `/guilds/${guildId}/player/announce`, { text });
 
 // ---- Saved playlists (everyone looks and adds songs; DJs do the rest) ----
 

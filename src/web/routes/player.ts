@@ -115,6 +115,16 @@ export function playerRoutes({ client, players, library, settings }: WebContext)
     return players.setFilter(guild.id, filter);
   });
 
+  // Speaks { text } in voice (text-to-speech); the song pauses for it. Answers once it has been said.
+  djRoute("post", "/guilds/:id/player/announce", ({ guild, user }, req) => {
+    const text = req.body?.text;
+    if (typeof text !== "string") throw new UserError('"text" must be the text to say.');
+    return players.announce(guild.id, text, { id: user.id, name: user.name, via: "web" }, {
+      voiceChannelId: guild.voiceStates.cache.get(user.id)?.channelId ?? null,
+      textChannelId: null,
+    });
+  });
+
   // Volume normalization on or off: { enabled: boolean }. Saved as a server setting.
   djRoute("post", "/guilds/:id/player/normalize", ({ guild }, req) => {
     const enabled = req.body?.enabled;
