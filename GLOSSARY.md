@@ -37,7 +37,7 @@ Playing every song at about the same loudness, so a loud song after a quiet one 
 _Avoid_: audio normalization, loudness normalization, effect
 
 **Announcement**:
-Something a DJ types that the bot says aloud in the voice channel (text-to-speech). Now playing pauses for it and then carries on.
+Something the bot says aloud in the voice channel (text-to-speech): typed by a DJ, or an **automatic announcement** the server switched on (before a song, when a playlist starts, when someone joins or leaves). Now playing pauses for it and then carries on.
 _Avoid_: TTS message, broadcast
 
 ### Playlists

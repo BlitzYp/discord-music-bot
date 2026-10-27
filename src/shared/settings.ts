@@ -90,7 +90,58 @@ export interface GuildSettings {
    * DJs switch it with /normalize or on the website's player, not on the Settings page.
    */
   normalizeVolume: boolean;
+  /** What the bot says in voice by itself (text-to-speech), and when. See AutoAnnouncements. */
+  autoAnnouncements: AutoAnnouncements;
 }
+
+/**
+ * When the song-start announcement is said:
+ * - "every-song": before every song (a song on repeat only the first time).
+ * - "first-song": only before a song that starts when nothing was playing.
+ */
+export const SONG_START_WHEN = ["every-song", "first-song"] as const;
+export type SongStartWhen = (typeof SONG_START_WHEN)[number];
+
+/** One automatic announcement: whether it's on, and what the bot says. `{name}`-style words are filled in. */
+export interface AutoAnnouncement {
+  enabled: boolean;
+  message: string;
+}
+
+/**
+ * Announcements the bot makes by itself in the voice channel (text-to-speech). Server admins switch each one on and
+ * edit its message on the Settings page. All off by default.
+ */
+export interface AutoAnnouncements {
+  /** Before a song starts. */
+  songStart: AutoAnnouncement & { when: SongStartWhen };
+  /** When a saved playlist starts playing; said together with the song-start announcement, before the first song. */
+  playlistStart: AutoAnnouncement;
+  /** When someone joins the bot's voice channel. */
+  memberJoin: AutoAnnouncement;
+  /** When someone leaves the bot's voice channel. */
+  memberLeave: AutoAnnouncement;
+}
+
+export type AutoAnnouncementKind = keyof AutoAnnouncements;
+
+/** The words each message may use, filled in when it's said. */
+export const AUTO_ANNOUNCEMENT_WORDS: Record<AutoAnnouncementKind, readonly string[]> = {
+  songStart: ["song", "artist", "user"],
+  playlistStart: ["playlist", "songs", "user"],
+  memberJoin: ["name"],
+  memberLeave: ["name"],
+};
+
+/** The longest message an admin can write for an automatic announcement. */
+export const MAX_AUTO_ANNOUNCEMENT_MESSAGE_LENGTH = 200;
+
+export const DEFAULT_AUTO_ANNOUNCEMENTS: AutoAnnouncements = {
+  songStart: { enabled: false, message: "Now playing {song}, requested by {user}.", when: "every-song" },
+  playlistStart: { enabled: false, message: "Starting the playlist {playlist}." },
+  memberJoin: { enabled: false, message: "Welcome, {name}!" },
+  memberLeave: { enabled: false, message: "Bye, {name}!" },
+};
 
 export const DEFAULT_GUILD_SETTINGS: GuildSettings = {
   djRoleId: null,
@@ -102,6 +153,7 @@ export const DEFAULT_GUILD_SETTINGS: GuildSettings = {
   announceChannelId: null,
   uploadPermission: "dj",
   normalizeVolume: false,
+  autoAnnouncements: DEFAULT_AUTO_ANNOUNCEMENTS,
 };
 
 /** The allowed range of each number setting. The website uses them for its inputs; the server checks them. */

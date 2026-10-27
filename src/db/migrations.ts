@@ -126,6 +126,13 @@ const MIGRATIONS: string[] = [
   -- Whether the server plays every song at about the same loudness (DJs switch it with /normalize). 0 or 1.
   ALTER TABLE guild_settings ADD COLUMN normalize_volume INTEGER NOT NULL DEFAULT 0;
   `,
+
+  // 5: automatic announcements (added after milestone 9)
+  `
+  -- What the bot says by itself in voice, and when (AutoAnnouncements in src/shared/settings.ts), as JSON.
+  -- NULL = the defaults (all off).
+  ALTER TABLE guild_settings ADD COLUMN auto_announcements TEXT;
+  `,
 ];
 
 /** Brings the database up to date by running the migrations it hasn't run yet. */

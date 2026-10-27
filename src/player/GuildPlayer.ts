@@ -3,7 +3,9 @@ import type { SavedPlayer } from "../db/playerStateStore.js";
 import { playbackRate } from "../shared/filters.js";
 import { MAX_VOLUME } from "../shared/player.js";
 import type { YoutubeMode } from "../shared/settings.js";
-import type { AudioFilter, LoopMode, PlayerSnapshot, QueueItem, QueuePlacement } from "../shared/types.js";
+import type { AudioFilter, LoopMode, PlayerSnapshot, QueueItem, QueuePlacement, Requester } from "../shared/types.js";
+import { fillMessage, shortenForSpeech } from "../tts/messages.js";
+import { deleteSpeechFile } from "../tts/speech.js";
 import { UserError } from "./errors.js";
 import { applyFilter } from "./filters.js";
 import { normalizationGain } from "./loudness.js";
@@ -122,8 +124,15 @@ export class GuildPlayer {
    */
   private songGain = 1;
 
-  /** Set while an announcement is being spoken (see `announce()`). */
+  /** Set while an announcement is being spoken (see `speak()`). */
   private announcement: ActiveAnnouncement | null = null;
+
+  /** The playlist-start announcement, said before the next song starts (see `introducePlaylist()`). */
+  private playlistIntro: string | null = null;
+  /** Whether nothing was playing before the next song, for the song-start announcement's "first-song" setting. */
+  private startsAfterSilence = true;
+  /** The last item that started playing, so a song on repeat (or retried) isn't announced again. */
+  private lastStartedItemId: string | null = null;
 
   constructor(
     readonly guildId: string,
@@ -431,9 +440,17 @@ export class GuildPlayer {
   async announce(speech: Track, voiceChannelId: string | null, textChannelId: string | null): Promise<void> {
     // After a restart, this also continues the interrupted song, so it can continue after the speech too.
     const player = await this.ensureConnected(voiceChannelId, textChannelId);
+    await this.speak(player, speech, { continueSong: true });
+  }
 
+  /**
+   * Plays `speech` and waits for it to end (see `announce()`). With `continueSong`, the song that was playing continues
+   * afterwards; without it (a song-start announcement), the caller starts the next song itself.
+   */
+  private async speak(player: Player, speech: Track, { continueSong }: { continueSong: boolean }): Promise<void> {
     const playing = player.queue.current;
-    const song = this.current && playing ? { track: playing, atMs: this.songPositionMs(), paused: player.paused } : null;
+    const song =
+      continueSong && this.current && playing ? { track: playing, atMs: this.songPositionMs(), paused: player.paused } : null;
     let finished!: () => void;
     const ended = new Promise<void>((resolve) => (finished = resolve));
     this.announcement = { speech, finished, song };
@@ -454,6 +471,52 @@ export class GuildPlayer {
       await this.continueAfterAnnouncement(song);
       this.emitPlayerUpdate();
     }
+  }
+
+  /**
+   * Remembers a playlist-start announcement ("Starting the playlist …"), if the server has it on, to be said before
+   * the next song starts. PlayerManager calls it just before queueing a saved playlist whose first song starts now.
+   */
+  introducePlaylist(name: string, songCount: number, requestedBy: Requester): void {
+    const { playlistStart } = this.manager.settings.guild(this.guildId).autoAnnouncements;
+    if (!playlistStart.enabled) return;
+    const songs = `${songCount} ${songCount === 1 ? "song" : "songs"}`;
+    this.playlistIntro = fillMessage(playlistStart.message, { playlist: name, songs, user: requestedBy.name });
+  }
+
+  /**
+   * Says the song-start announcement (and a waiting playlist-start one) before the current item starts, if the server
+   * has them on. A failure is only logged: the song matters more than its announcement.
+   */
+  private async sayIntro(player: Player): Promise<void> {
+    const text = this.introText();
+    if (!text) return;
+    try {
+      const speech = await this.manager.prepareSpeech(text);
+      try {
+        await this.speak(player, speech.track, { continueSong: false });
+      } finally {
+        await deleteSpeechFile(speech.path);
+      }
+    } catch (error) {
+      console.warn(`[tts] ${this.guildId}: couldn't say "${text}": ${error instanceof Error ? error.message : error}`);
+    }
+  }
+
+  /** What to say before the current item starts, or null for nothing. Uses up the waiting playlist-start announcement. */
+  private introText(): string | null {
+    const parts: string[] = [];
+    if (this.playlistIntro) parts.push(this.playlistIntro);
+    this.playlistIntro = null;
+
+    const item = this.current;
+    const { songStart } = this.manager.settings.guild(this.guildId).autoAnnouncements;
+    const isNewItem = item !== null && item.id !== this.lastStartedItemId;
+    const isDue = songStart.when === "every-song" || this.startsAfterSilence;
+    if (songStart.enabled && item && isNewItem && isDue) {
+      parts.push(fillMessage(songStart.message, { song: item.title, artist: item.author ?? "", user: item.requestedBy.name }));
+    }
+    return parts.length > 0 ? shortenForSpeech(parts.join(" ")) : null;
   }
 
   /**
@@ -481,8 +544,9 @@ export class GuildPlayer {
       const atMs = song.track.info.isSeekable ? song.atMs : 0;
       await player.play({ clientTrack: song.track, paused: song.paused, position: atMs });
       this.speedAnchor = { lavalinkMs: atMs, songMs: atMs };
-    } else if (player.queue.current) {
-      // Nothing to go back to. Normally the speech has finished by now; this only stops one that ran too long.
+    } else if (!this.current && player.queue.current) {
+      // Nothing to go back to, and no song about to start. Normally the speech has finished by now; this only stops
+      // one that ran too long.
       await player.stopPlaying(/* clearQueue */ false, /* executeAutoplay */ false);
     }
   }
@@ -614,6 +678,8 @@ export class GuildPlayer {
     this.interrupted = null;
     this.advanceAfterStuckTrack = false;
     this.pendingRetry = null;
+    this.playlistIntro = null;
+    this.startsAfterSilence = true;
     // The bot left voice mid-announcement: stop waiting for the speech to end.
     this.announcement?.finished();
     this.emitQueueUpdate();
@@ -699,6 +765,7 @@ export class GuildPlayer {
 
     // Nothing left to play.
     this.setCurrent(null, null);
+    this.startsAfterSilence = true;
     const player = this.lavalinkPlayer;
     // If Lavalink is still playing the old track (we got here through /skip), stop it.
     if (player?.queue.current) await player.stopPlaying(/* clearQueue */ false, /* executeAutoplay */ false);
@@ -738,6 +805,10 @@ export class GuildPlayer {
     // Set the song's normalization volume before it starts, so its first second isn't too loud or too quiet.
     const loaded = this.currentMethod ? { track, method: this.currentMethod } : null;
     this.songGain = this.current && loaded ? await this.normalizationGainFor(this.current, loaded) : 1;
+    // Only a song starting from its beginning is announced, not one continuing (after a restart or a failed attempt).
+    if (startAtMs === 0) await this.sayIntro(player);
+    this.startsAfterSilence = false;
+    this.lastStartedItemId = this.current?.id ?? null;
     await this.applySongGain(player);
     // Lavalink stays paused across track changes; a new track should always be heard.
     // Always passing `position` (even 0) makes lavalink-client reset its position for the new track at once.
@@ -789,7 +860,8 @@ export class GuildPlayer {
   /** Where the current song is, in song time (see `speedAnchor`), kept between 0 and its length. */
   private songPositionMs(): number {
     // During an announcement Lavalink's position is the speech's; the song waits where it was.
-    if (this.announcement?.song) return this.announcement.song.atMs;
+    // Before a song starts (a song-start announcement), it's at 0.
+    if (this.announcement) return this.announcement.song?.atMs ?? 0;
     const lavalinkMs = this.lavalinkPlayer?.position ?? 0;
     const songMs = this.speedAnchor.songMs + (lavalinkMs - this.speedAnchor.lavalinkMs) * playbackRate(this.filter);
     return Math.max(0, Math.min(songMs, this.current?.durationMs ?? Infinity));

@@ -3,13 +3,26 @@ import { Router } from "express";
 import { z } from "zod";
 import { UserError } from "../../player/errors.js";
 import { UPLOAD_PERMISSIONS } from "../../shared/library.js";
-import { type GuildSettingsResponse, SETTING_LIMITS } from "../../shared/settings.js";
+import {
+  type GuildSettingsResponse,
+  MAX_AUTO_ANNOUNCEMENT_MESSAGE_LENGTH,
+  SETTING_LIMITS,
+  SONG_START_WHEN,
+} from "../../shared/settings.js";
 import { requireGuildAccess } from "../access.js";
 import { parseBody, route } from "../http.js";
 import type { WebContext } from "../server.js";
 
 const snowflake = z.string().regex(/^\d+$/, "must be a Discord id");
 const whole = (limits: { min: number; max: number }) => z.number().int().min(limits.min).max(limits.max);
+
+/** One automatic announcement: on or off, and its message (which may not be empty, even while it's off). */
+const autoAnnouncement = z
+  .object({
+    enabled: z.boolean(),
+    message: z.string().trim().min(1, "write what the bot should say").max(MAX_AUTO_ANNOUNCEMENT_MESSAGE_LENGTH),
+  })
+  .strict();
 
 /** What PATCH /guilds/:id/settings accepts: any of the settings, each checked. Unknown keys are refused. */
 const guildSettingsChanges = z
@@ -22,6 +35,15 @@ const guildSettingsChanges = z
     leaveWhenEmptyAfterSec: whole(SETTING_LIMITS.leaveWhenEmptyAfterSec),
     announceChannelId: snowflake.nullable(),
     uploadPermission: z.enum(UPLOAD_PERMISSIONS),
+    // All four together: the Settings page always sends the whole set.
+    autoAnnouncements: z
+      .object({
+        songStart: autoAnnouncement.extend({ when: z.enum(SONG_START_WHEN) }).strict(),
+        playlistStart: autoAnnouncement,
+        memberJoin: autoAnnouncement,
+        memberLeave: autoAnnouncement,
+      })
+      .strict(),
   })
   .partial()
   .strict();

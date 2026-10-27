@@ -1028,6 +1028,28 @@ main > *,
   margin: -12px 0 0;
 }
 
+/* A second group of settings on the same page ("Spoken announcements"). */
+.settings-section-heading {
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+/* On/off, the message, and (for songs) when: on one line when there's room. */
+.auto-announcement {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.auto-announcement input[type="text"] {
+  min-width: 12em;
+}
+
+.field .auto-announcement select {
+  flex-basis: 100%;
+}
+
 .field {
   display: grid;
   grid-template-columns: 200px minmax(0, 1fr);

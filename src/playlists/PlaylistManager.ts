@@ -241,7 +241,10 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> {
       thumbnail: song.thumbnail,
       requestedBy: request.requestedBy,
     }));
-    const result = await this.players.addMany(guildId, items, request, mode);
+    const result = await this.players.addMany(guildId, items, request, mode, {
+      name: playlist.name,
+      requestedBy: request.requestedBy,
+    });
     return { playlist, result };
   }
 

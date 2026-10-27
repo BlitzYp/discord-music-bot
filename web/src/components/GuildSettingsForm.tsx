@@ -8,6 +8,7 @@ const UPLOAD_PERMISSION_LABELS: Record<UploadPermission, string> = {
   off: "Nobody: uploads are off",
 };
 import { useAction } from "../useAction";
+import { AutoAnnouncementFields } from "./AutoAnnouncementFields";
 
 /** A server's settings page (DJ role, volume, limits...). Only shown to server admins; the bot checks again. */
 export function GuildSettingsForm({ guildId }: { guildId: string }) {
@@ -41,7 +42,9 @@ export function GuildSettingsForm({ guildId }: { guildId: string }) {
   async function save(event: FormEvent) {
     event.preventDefault();
     await run(async () => {
-      const response = await api.updateGuildSettings(guildId, draft!);
+      // Volume normalization is switched on the player (DJs), not here; the bot refuses it on this page.
+      const { normalizeVolume: _notOnThisPage, ...changes } = draft!;
+      const response = await api.updateGuildSettings(guildId, changes);
       setLoaded(response);
       setDraft(response.settings);
       setJustSaved(true);
@@ -144,6 +147,8 @@ export function GuildSettingsForm({ guildId }: { guildId: string }) {
           ))}
         </select>
       </Field>
+
+      <AutoAnnouncementFields value={draft.autoAnnouncements} onChange={(value) => change("autoAnnouncements", value)} />
 
       <div className="save-row">
         <button type="submit" className="primary" disabled={pending || !hasChanges}>

@@ -156,6 +156,7 @@ Possibly needed later:
 - `history_items(guild_id, position, item_json)`: "Recently played"; position 1 is the newest (20 per server)
 - `playlists`, `playlist_items` (migration 2, milestone 7): see "Playlists".
 - `loudness(song_key PRIMARY KEY, loudness_lufs, true_peak_dbtp, measured_at)` (migration 4): each song's measured loudness, for volume normalization. Migration 4 also adds `guild_settings.normalize_volume`.
+- Migration 5 adds `guild_settings.auto_announcements`: the automatic announcements as JSON (NULL = the defaults). Each one is laid over its default when read, so one added later starts with its default.
 - `library_files(id, guild_id, file_name, original_name, title, artist, duration_ms, size_bytes, uploaded_by_id, uploaded_by_name, created_at)` (migration 3, milestone 8). `file_name` is `<id>.<extension>` inside `data/library/<guild_id>/`; a full path isn't stored, so the data folder can move. Migration 3 also adds `guild_settings.upload_permission`.
 
 ### Queue persistence (built in milestone 6)
@@ -234,9 +235,15 @@ POST   /guilds/:id/playlists/from-queue               (dj) { name }
 ## Announcements (text-to-speech, added after milestone 9, at the owner's request)
 - DJs type something and the bot says it in the voice channel: `/announce <text>` and the **Announce** box on the website's Player tab. At most 300 characters; one announcement at a time per server.
 - **Voice: Piper** (offline neural text-to-speech; `npm run setup:piper` puts it in `bin/piper/`). Chosen over the built-in Windows voices (robotic), free online voices through a Lavalink plugin (the text leaves the PC, and they break like the YouTube plugin does) and paid services (keys, costs). The Windows program comes from Piper's 2023.11.14-2 release, the last one with a ready-made `.exe`; newer versions are only a Python package. One voice for now, `en_US-lessac-medium`.
+- **Foreign writing:** the English voice only reads Latin letters (and Korean); for anything else it says the alphabet's name ("Japanese letter"). So the text is first spelled in Latin letters: Japanese in romaji (kuroshiro with its kuromoji dictionary), Chinese in pinyin (pinyin-pro), other alphabets with any-ascii. Chosen over switching to a Japanese or Chinese voice for those words: Piper's Japanese voice needs the newer, Python-only Piper, and changing voices mid-sentence sounds like two people. The price is an English accent. Each phrase (between commas and full stops) with any kana in it is read as Japanese; otherwise its Chinese characters are read as Chinese, so a title written only in kanji is read as Chinese.
 - **Same voice path:** Piper writes a WAV file to `data/tts/`, Lavalink plays it through its local source, and the file is deleted afterwards.
 - **The song pauses for it:** Lavalink plays one track per server, so it can't speak over the music. The speech replaces the song, then the song continues from the same spot (still paused, if it was). The effect and the normalization volume are switched off while it speaks and come back with the song. Other controls (skip, seek, …) wait until the song is back. With nothing playing, the bot just speaks, joining the DJ's voice channel if needed.
-- Planned next (not built): automatic announcements, switched on per server, such as "Now playing …" before a song, a playlist starting, or a welcome when someone joins the voice channel; a choice of voices.
+- **Automatic announcements** (`autoAnnouncements` in the server's settings): four the bot says by itself, each switched on and worded by server admins on the Settings tab. All off by default. Words in `{curly brackets}` are filled in; text that comes out longer than 300 characters is cut short.
+  - **Before a song** (`{song}`, `{artist}`, `{user}`): said in the gap before the song starts, so the song itself isn't interrupted. "Every song" or "Only when the music starts" (a song that starts while nothing was playing). A song on repeat is announced once; a song continuing after a restart isn't.
+  - **When a saved playlist starts** (`{playlist}`, `{songs}`, `{user}`): said together with the song announcement, before the first song, when the playlist's first song starts right away (Play, or Add to queue with nothing playing).
+  - **When someone joins / leaves the bot's voice channel** (`{name}`): people who join (or leave) within 3 seconds of each other are named together ("Welcome, Ann and Bob!"); the same person isn't announced again within a minute; no goodbye to an empty channel; bots are ignored. Skipped while another announcement is being said, so they don't pile up.
+  - If Piper fails, the song plays anyway and the reason is logged.
+- Not built yet: a choice of voices, speaking speed.
 
 ## Real-time (Socket.IO, built in milestone 4)
 - The client sends `guild:watch <id>` and joins the room `guild:<id>`. From milestone 5, the server first checks that the logged-in user is a member of that server.

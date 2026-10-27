@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
-import type { LavalinkManager } from "lavalink-client";
+import type { LavalinkManager, Track } from "lavalink-client";
 import type { LibraryStore } from "../db/libraryStore.js";
 import type { PlayerStateStore, SavedPlayer, SavedStatus } from "../db/playerStateStore.js";
 import type { SettingsStore } from "../db/settingsStore.js";
@@ -8,6 +8,7 @@ import { libraryFilePath } from "../library/paths.js";
 import { formatDuration } from "../shared/format.js";
 import { type AddManyResult, MAX_PLAYLIST_SONGS, type PlaylistPlayMode } from "../shared/playlists.js";
 import type { AudioFilter, LoopMode, PlayerSnapshot, QueueItem, QueuePlacement, Requester } from "../shared/types.js";
+import { shortenForSpeech } from "../tts/messages.js";
 import { cleanAnnouncementText, deleteSpeechFile, synthesizeSpeech } from "../tts/speech.js";
 import { UserError } from "./errors.js";
 import { GuildPlayer } from "./GuildPlayer.js";
@@ -39,6 +40,15 @@ export interface PlayRequest {
   textChannelId: string | null;
   /** Where the new songs go; at the end of the queue unless said otherwise. */
   placement?: QueuePlacement;
+}
+
+/** Who "asked" for an automatic announcement's speech track (Lavalink stores a requester with every track). */
+const AUTOMATIC_ANNOUNCER: Requester = { id: "automatic", name: "Automatic announcement", via: "discord" };
+
+/** A saved playlist being played, so its start can be announced (see GuildPlayer.introducePlaylist). */
+export interface PlaylistStart {
+  name: string;
+  requestedBy: Requester;
 }
 
 /**
@@ -147,12 +157,16 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
    * current track and empties the queue first; "append" adds to the end; "next" adds in front of the queue
    * ("Play next" on the website). Joins the requester's voice channel if needed. Songs over the server's length
    * limit, or past its queue limit, are left out and counted.
+   *
+   * `playlist` is the saved playlist being played, if it is one: when its first song starts right away, the server's
+   * playlist-start announcement is said before it.
    */
   async addMany(
     guildId: string,
     items: QueueItem[],
     request: VoiceRequest,
     mode: PlaylistPlayMode | "next",
+    playlist?: PlaylistStart,
   ): Promise<AddManyResult> {
     const allowed = items.filter((item) => !this.isTooLong(guildId, item.durationMs));
     const tooLong = items.length - allowed.length;
@@ -162,6 +176,8 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
 
     const player = this.getOrCreatePlayer(guildId);
     const added = await player.run(async () => {
+      const startsNow = mode === "replace" || !player.current;
+      if (playlist && startsNow) player.introducePlaylist(playlist.name, allowed.length, playlist.requestedBy);
       if (mode === "replace") return player.replaceQueue(allowed, request.voiceChannelId, request.textChannelId);
       await player.ensureConnected(request.voiceChannelId, request.textChannelId);
       return player.enqueueMany(allowed, mode === "next" ? "next" : "end");
@@ -184,12 +200,37 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
       const player = this.getOrCreatePlayer(guildId);
       // Join voice before making the speech, so "join a voice channel first" comes back immediately.
       await player.run(() => player.ensureConnected(request.voiceChannelId, request.textChannelId));
-      speechPath = await synthesizeSpeech(cleaned);
-      const speech = await loadFileWithLavalink(this.lavalink, speechPath, announcedBy);
-      await player.run(() => player.announce(speech, request.voiceChannelId, request.textChannelId));
+      const speech = await this.prepareSpeech(cleaned, announcedBy);
+      speechPath = speech.path;
+      await player.run(() => player.announce(speech.track, request.voiceChannelId, request.textChannelId));
     } finally {
       this.announcingIn.delete(guildId);
       if (speechPath) await deleteSpeechFile(speechPath);
+    }
+  }
+
+  /**
+   * An automatic announcement (someone joined or left the voice channel): said like `announce()`, in the channel the
+   * bot is in. Too-long text is cut short. Skipped when the bot isn't in voice, or while another announcement is
+   * being made, so they don't pile up.
+   */
+  async announceAutomatically(guildId: string, text: string): Promise<void> {
+    const voiceChannelId = this.players.get(guildId)?.voiceChannelId;
+    if (!voiceChannelId || this.announcingIn.has(guildId)) return;
+    await this.announce(guildId, shortenForSpeech(text), AUTOMATIC_ANNOUNCER, { voiceChannelId, textChannelId: null });
+  }
+
+  /**
+   * Makes the speech for `text` (Piper) and loads it in Lavalink. The caller deletes the file (`path`) once it has been
+   * said, with deleteSpeechFile().
+   */
+  async prepareSpeech(text: string, requester: Requester = AUTOMATIC_ANNOUNCER): Promise<{ track: Track; path: string }> {
+    const path = await synthesizeSpeech(text);
+    try {
+      return { track: await loadFileWithLavalink(this.lavalink, path, requester), path };
+    } catch (error) {
+      await deleteSpeechFile(path);
+      throw error;
     }
   }
 

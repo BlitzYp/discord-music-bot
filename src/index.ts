@@ -13,6 +13,7 @@ import { SettingsStore } from "./db/settingsStore.js";
 import { LibraryManager } from "./library/LibraryManager.js";
 import { createLavalink } from "./player/lavalink.js";
 import { LoudnessCache } from "./player/LoudnessCache.js";
+import { MemberAnnouncements } from "./player/MemberAnnouncements.js";
 import { PlayerManager } from "./player/PlayerManager.js";
 import { clearDownloads, updateYtDlp } from "./player/resolvers/ytdlp.js";
 import { PlaylistManager } from "./playlists/PlaylistManager.js";
@@ -47,7 +48,7 @@ client.on("raw", (packet) => void lavalink.sendRawData(packet));
 registerReady(client, lavalink, players, config);
 registerInteractionCreate(client, { players, playlists, library, settings });
 registerPlayerEvents(client, players, settings);
-registerVoiceStateUpdate(client, players);
+registerVoiceStateUpdate(client, players, new MemberAnnouncements(players, settings));
 registerPresence(client, players, settings);
 
 process.on("unhandledRejection", (error) => console.error("[process] unhandled rejection:", error));

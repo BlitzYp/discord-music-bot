@@ -1,6 +1,8 @@
 import { EventEmitter } from "node:events";
 import type { UploadPermission } from "../shared/library.js";
 import {
+  type AutoAnnouncements,
+  DEFAULT_AUTO_ANNOUNCEMENTS,
   DEFAULT_GLOBAL_SETTINGS,
   DEFAULT_GUILD_SETTINGS,
   type GlobalSettings,
@@ -19,6 +21,8 @@ interface GuildSettingsRow {
   announce_channel_id: string | null;
   upload_permission: UploadPermission;
   normalize_volume: number;
+  /** JSON, or null for the defaults. */
+  auto_announcements: string | null;
 }
 
 /**
@@ -77,6 +81,7 @@ export class SettingsStore extends EventEmitter<{ "global:change": [settings: Gl
       announceChannelId: row.announce_channel_id,
       uploadPermission: row.upload_permission,
       normalizeVolume: row.normalize_volume === 1,
+      autoAnnouncements: readAutoAnnouncements(row.auto_announcements),
     };
   }
 
@@ -87,10 +92,10 @@ export class SettingsStore extends EventEmitter<{ "global:change": [settings: Gl
       .prepare(
         `INSERT INTO guild_settings (guild_id, dj_role_id, default_volume, max_queue_length, max_track_duration_sec,
                                      require_same_vc, leave_after_sec, announce_channel_id, upload_permission,
-                                     normalize_volume)
+                                     normalize_volume, auto_announcements)
          VALUES (@guildId, @djRoleId, @defaultVolume, @maxQueueLength, @maxTrackDurationSec,
                  @requireSameVoiceChannel, @leaveWhenEmptyAfterSec, @announceChannelId, @uploadPermission,
-                 @normalizeVolume)
+                 @normalizeVolume, @autoAnnouncements)
          ON CONFLICT (guild_id) DO UPDATE SET
            dj_role_id = excluded.dj_role_id,
            default_volume = excluded.default_volume,
@@ -100,16 +105,32 @@ export class SettingsStore extends EventEmitter<{ "global:change": [settings: Gl
            leave_after_sec = excluded.leave_after_sec,
            announce_channel_id = excluded.announce_channel_id,
            upload_permission = excluded.upload_permission,
-           normalize_volume = excluded.normalize_volume`,
+           normalize_volume = excluded.normalize_volume,
+           auto_announcements = excluded.auto_announcements`,
       )
       .run({
         guildId,
         ...settings,
         requireSameVoiceChannel: settings.requireSameVoiceChannel ? 1 : 0,
         normalizeVolume: settings.normalizeVolume ? 1 : 0,
+        autoAnnouncements: JSON.stringify(settings.autoAnnouncements),
       });
     return settings;
   }
+}
+
+/**
+ * Reads the saved automatic announcements. Each one is laid over its default, so an announcement added in a later
+ * version (missing from the saved JSON) starts with its default instead of being undefined.
+ */
+function readAutoAnnouncements(json: string | null): AutoAnnouncements {
+  const saved = (json ? JSON.parse(json) : {}) as Partial<AutoAnnouncements>;
+  return {
+    songStart: { ...DEFAULT_AUTO_ANNOUNCEMENTS.songStart, ...saved.songStart },
+    playlistStart: { ...DEFAULT_AUTO_ANNOUNCEMENTS.playlistStart, ...saved.playlistStart },
+    memberJoin: { ...DEFAULT_AUTO_ANNOUNCEMENTS.memberJoin, ...saved.memberJoin },
+    memberLeave: { ...DEFAULT_AUTO_ANNOUNCEMENTS.memberLeave, ...saved.memberLeave },
+  };
 }
 
 /** Drops keys whose value is `undefined`, so spreading the result doesn't overwrite settings with nothing. */

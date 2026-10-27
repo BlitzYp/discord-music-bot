@@ -5,6 +5,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { UserError } from "../player/errors.js";
 import { MAX_ANNOUNCEMENT_LENGTH } from "../shared/announcements.js";
+import { spellForSpeech } from "./spelling.js";
 
 /**
  * Turns text into speech with Piper (offline text-to-speech, downloaded by `npm run setup:piper`). Piper writes a WAV
@@ -42,7 +43,8 @@ export async function synthesizeSpeech(text: string): Promise<string> {
 
   await mkdir(SPEECH_DIR, { recursive: true });
   const outputPath = join(SPEECH_DIR, `${randomUUID()}.wav`);
-  await runPiper(["--model", model, "--output_file", outputPath], text);
+  // The English voice can't read Japanese, Chinese, Cyrillic and so on; spell them in Latin letters first.
+  await runPiper(["--model", model, "--output_file", outputPath], await spellForSpeech(text));
   return outputPath;
 }
 
