@@ -4,6 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Music Bot</title>
+    <script>
+      // Applies a saved light/dark choice before the page draws, so it doesn't flash the wrong colors.
+      // ThemeToggle.tsx writes this setting; without one, styles.css follows the system theme.
+      try {
+        const theme = localStorage.getItem("theme");
+        if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+      } catch {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

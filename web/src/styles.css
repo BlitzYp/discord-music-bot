@@ -1,14 +1,24 @@
-/* Neutral surfaces follow the system theme; color is reserved for playback and feedback. */
+/*
+ * Neutral surfaces follow the system theme; color is reserved for playback and feedback.
+ * The header's theme button overrides the system by setting data-theme="light" or "dark" on <html>,
+ * so the dark colors are listed twice: once for the system setting and once for the button.
+ */
 :root {
-  --bg: #fafaf9;
-  --card: #ffffff;
-  --surface: #f0f2ee;
-  --text: #252a26;
-  --muted: #69716b;
-  --border: #e1e5df;
-  --hover: #f0f3ef;
-  --accent: #446b50;
-  --positive: #39734b;
+  --bg: #f1f3ee;
+  --card: #fffefa;
+  --surface: #e9eee7;
+  --text: #26332d;
+  --muted: #596b61;
+  --border: #d9e2d8;
+  --hover: #f0f5ed;
+  --accent: #3d7057;
+  --positive: #31714e;
+  --card-shadow: 0 8px 24px rgb(42 65 49 / 0.06);
+  --player-background: linear-gradient(135deg, #fffefa, #f5f9f2);
+  --list-background: #fffefa;
+  --list-border: 1px solid var(--border);
+  --list-padding: 20px;
+  --list-shadow: 0 8px 24px rgb(42 65 49 / 0.04);
   --warning-bg: #fff4d6;
   --error-bg: #fce9e8;
   --error: #b73737;
@@ -16,7 +26,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #161917;
     --card: #1d221f;
     --surface: #282f2a;
@@ -26,11 +36,39 @@
     --hover: #202822;
     --accent: #adc9af;
     --positive: #9ac5a2;
+    --card-shadow: none;
+    --player-background: var(--card);
+    --list-background: transparent;
+    --list-border: 0;
+    --list-padding: 0px;
+    --list-shadow: none;
     --warning-bg: #3c341e;
     --error-bg: #422625;
     --error: #f39a95;
     color-scheme: dark;
   }
+}
+
+:root[data-theme="dark"] {
+  --bg: #161917;
+  --card: #1d221f;
+  --surface: #282f2a;
+  --text: #e7ede7;
+  --muted: #a0aca2;
+  --border: #333c35;
+  --hover: #202822;
+  --accent: #adc9af;
+  --positive: #9ac5a2;
+  --card-shadow: none;
+  --player-background: var(--card);
+  --list-background: transparent;
+  --list-border: 0;
+  --list-padding: 0px;
+  --list-shadow: none;
+  --warning-bg: #3c341e;
+  --error-bg: #422625;
+  --error: #f39a95;
+  color-scheme: dark;
 }
 
 * {
@@ -186,6 +224,20 @@ button.link:hover:not(:disabled) {
   gap: 9px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.theme-toggle {
+  flex-shrink: 0;
+  background: none;
+  border-color: transparent;
+  color: var(--muted);
+}
+
 .account {
   display: flex;
   align-items: center;
@@ -255,7 +307,7 @@ button.link:hover:not(:disabled) {
 }
 
 .tabs button.active {
-  border-bottom-color: var(--text);
+  border-bottom-color: var(--accent);
   color: var(--text);
   font-weight: 600;
 }
@@ -280,8 +332,9 @@ main > *,
 .card {
   padding: 24px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--card);
+  box-shadow: var(--card-shadow);
 }
 
 .card h3,
@@ -346,6 +399,10 @@ main > *,
 }
 
 /* The current song is a full-width section above the lists. */
+.now-playing {
+  background: var(--player-background);
+}
+
 .now-playing .track {
   display: flex;
   align-items: center;
@@ -358,7 +415,7 @@ main > *,
   flex-shrink: 0;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: 7px;
   background: var(--surface);
   color: var(--muted);
 }
@@ -745,6 +802,16 @@ main > *,
   border-color: var(--text);
   background: var(--text);
   color: var(--bg);
+}
+
+/* Give the queue and history their own surfaces in light mode; dark mode keeps its existing layout. */
+.queue-section,
+.history-section {
+  padding: var(--list-padding);
+  border: var(--list-border);
+  border-radius: 12px;
+  background: var(--list-background);
+  box-shadow: var(--list-shadow);
 }
 
 /* Queue headings and actions stay outside the scrolling list. */
@@ -1267,6 +1334,11 @@ footer {
 
   .card {
     padding: 16px;
+  }
+
+  .queue-section,
+  .history-section {
+    padding: min(var(--list-padding), 16px);
   }
 
   .now-playing .track {

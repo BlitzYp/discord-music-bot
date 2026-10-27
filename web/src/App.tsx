@@ -9,6 +9,7 @@ import { LibraryPage } from "./components/LibraryPage";
 import { NowPlaying } from "./components/NowPlaying";
 import { PlaylistsPage } from "./components/PlaylistsPage";
 import { QueueList } from "./components/QueueList";
+import { ThemeToggle } from "./components/ThemeToggle";
 import { type CurrentUser, type GuildSummary, hasLevel } from "./shared";
 import { useGuildState } from "./useGuildState";
 
@@ -89,24 +90,27 @@ export function App() {
             Music Bot
           </button>
         </h1>
-        {user && (
-          <span className="account">
-            {user.isOwner && (
-              <button
-                type="button"
-                className={`small ${showAdmin ? "active" : ""}`}
-                onClick={() => navigate(guildId, showAdmin ? "player" : "admin")}
-              >
-                Admin
+        <div className="header-actions">
+          <ThemeToggle />
+          {user && (
+            <span className="account">
+              {user.isOwner && (
+                <button
+                  type="button"
+                  className={`small ${showAdmin ? "active" : ""}`}
+                  onClick={() => navigate(guildId, showAdmin ? "player" : "admin")}
+                >
+                  Admin
+                </button>
+              )}
+              <img src={user.avatarUrl} alt="" />
+              <span className="account-name">{user.name}</span>
+              <button type="button" className="small" onClick={logout}>
+                Log out
               </button>
-            )}
-            <img src={user.avatarUrl} alt="" />
-            <span className="account-name">{user.name}</span>
-            <button type="button" className="small" onClick={logout}>
-              Log out
-            </button>
-          </span>
-        )}
+            </span>
+          )}
+        </div>
       </header>
 
       {loadError && <p className="banner error">Couldn't reach the bot: {loadError}</p>}
