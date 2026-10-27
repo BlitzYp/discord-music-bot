@@ -46,3 +46,17 @@ Build them in order. Each milestone works end to end in Discord before the next 
 - The owner's machine is Windows; run commands natively there.
 - **Installing packages:** run `npm install --ignore-scripts` (then `npm rebuild esbuild` after a fresh install). Without it npm tries to compile `better-sqlite3` from source, which fails without Visual Studio, even though the package ships a ready-made Windows build.
 - A change is done when `npm run typecheck` and `npm test` pass and the behaviour has been checked as far as possible without the owner. Lavalink needs no Discord token: start it with `npm run lavalink`, then load links through `lavalink-client` to test resolvers. To test YouTube *playback*, the plugin's `GET /youtube/stream/<videoId>?withClient=<CLIENT>` endpoint streams real audio (send the Lavalink password as the `Authorization` header); run a second Lavalink on another port to compare configs without stopping the owner's. Playback in a voice channel is the owner's check in Discord; say what's left for them to test.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in this repo's GitHub Issues (BlitzYp/discord-music-bot), managed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
