@@ -6,8 +6,17 @@ import type { YoutubeMode } from "../shared/settings.js";
 import type { AudioFilter, LoopMode, PlayerSnapshot, QueueItem, QueuePlacement } from "../shared/types.js";
 import { UserError } from "./errors.js";
 import { applyFilter } from "./filters.js";
+import { normalizationGain } from "./loudness.js";
+import { measureLoudness } from "./measureLoudness.js";
 import type { PlayerManager } from "./PlayerManager.js";
 import { fallbackMethod, type ResolveMethod, resolvePlayable } from "./resolvers/index.js";
+import { type LoadedSong, songToMeasure } from "./songToMeasure.js";
+
+/**
+ * How long a song's start may wait for its loudness to be measured (normalization). A whole song usually takes
+ * about a second; one that takes longer plays unadjusted this time, and is ready the next time it plays.
+ */
+const LOUDNESS_WAIT_MS = 3_000;
 
 interface StartOptions {
   /** Load the item only this way (used to retry with yt-dlp). By default every method is tried in order. */
@@ -90,6 +99,12 @@ export class GuildPlayer {
    * See `songPositionMs()`.
    */
   private speedAnchor = { lavalinkMs: 0, songMs: 0 };
+
+  /**
+   * The volume multiplier volume normalization gives the current song (1 = unchanged). It's applied as Lavalink's
+   * "volume" filter, which multiplies with the player's volume, so /volume keeps working the same.
+   */
+  private songGain = 1;
 
   constructor(
     readonly guildId: string,
@@ -341,17 +356,38 @@ export class GuildPlayer {
     const songMs = this.songPositionMs(); // measured at the old speed, before switching
     await applyFilter(player, filter);
     this.filter = filter;
+    // Changing the effect clears every filter, the normalization volume included.
+    await this.applySongGain(player);
+    await this.makeAudibleNow(player, songMs);
+    this.emitPlayerUpdate();
+  }
 
-    // Seeking to where the song is makes the new effect audible right away; otherwise Lavalink first plays
-    // the few seconds of audio it already prepared with the old effect. It also makes Lavalink's position
-    // equal the song position again, which the speed conversion counts from.
+  /**
+   * Applies the server's volume normalization setting to the current song, after it was switched on or off.
+   * (The setting itself is saved by PlayerManager; following songs read it when they start.)
+   */
+  async refreshNormalization(): Promise<void> {
+    const player = this.lavalinkPlayer;
+    const playing = player?.queue.current;
+    if (!player || !playing || !this.current || !this.currentMethod || this.interrupted) return;
+
+    this.songGain = await this.normalizationGainFor(this.current, { track: playing, method: this.currentMethod });
+    await this.applySongGain(player);
+    await this.makeAudibleNow(player, this.songPositionMs());
+  }
+
+  /**
+   * Seeking to where the song is makes a filter change audible right away; otherwise Lavalink first plays the few
+   * seconds of audio it already prepared. It also makes Lavalink's position equal the song position again, which
+   * the speed conversion counts from (see `speedAnchor`).
+   */
+  private async makeAudibleNow(player: Player, songMs: number): Promise<void> {
     if (this.current && player.queue.current?.info.isSeekable) {
       await player.seek(songMs);
       this.speedAnchor = { lavalinkMs: songMs, songMs };
     } else {
       this.speedAnchor = { lavalinkMs: player.position, songMs };
     }
-    this.emitPlayerUpdate();
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -516,6 +552,7 @@ export class GuildPlayer {
       volume: interrupted?.volume ?? player?.volume ?? this.manager.settings.guild(this.guildId).defaultVolume,
       loopMode: this.loopMode,
       filter: this.filter,
+      normalizeVolume: this.normalizeVolumeIsOn(),
       queue: [...this.queue],
       history: [...this.history],
     };
@@ -594,10 +631,56 @@ export class GuildPlayer {
   private async playTrack(track: Track, startAtMs = 0): Promise<void> {
     const player = this.lavalinkPlayer;
     if (!player) throw new UserError("Not connected to a voice channel.");
+
+    // Set the song's normalization volume before it starts, so its first second isn't too loud or too quiet.
+    const loaded = this.currentMethod ? { track, method: this.currentMethod } : null;
+    this.songGain = this.current && loaded ? await this.normalizationGainFor(this.current, loaded) : 1;
+    await this.applySongGain(player);
     // Lavalink stays paused across track changes; a new track should always be heard.
     // Always passing `position` (even 0) makes lavalink-client reset its position for the new track at once.
     await player.play({ clientTrack: track, paused: false, position: startAtMs });
     this.speedAnchor = { lavalinkMs: startAtMs, songMs: startAtMs };
+    this.measureNextSongAhead();
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Volume normalization (see src/player/loudness.ts)
+  // ---------------------------------------------------------------------------------------------
+
+  private normalizeVolumeIsOn(): boolean {
+    return this.manager.settings.guild(this.guildId).normalizeVolume;
+  }
+
+  /**
+   * The volume multiplier that brings `item` to the common loudness: 1 when normalization is off, or when the song
+   * can't be measured (in time).
+   */
+  private async normalizationGainFor(item: QueueItem, loaded: LoadedSong): Promise<number> {
+    if (!this.normalizeVolumeIsOn()) return 1;
+    const song = songToMeasure(item, loaded, this.manager.lavalink, (fileId) => this.manager.libraryFilePath(this.guildId, fileId));
+    if (!song) return 1;
+
+    const measuring = this.manager.loudness.loudnessOf(song.key, () => measureLoudness(song.input));
+    const loudness = await waitAtMost(measuring, LOUDNESS_WAIT_MS);
+    return loudness ? normalizationGain(loudness) : 1;
+  }
+
+  /** Sets Lavalink's volume filter to `songGain`, unless it already is. */
+  private async applySongGain(player: Player): Promise<void> {
+    const current = player.filterManager.data.volume ?? 1;
+    if (current !== this.songGain) await player.filterManager.setVolume(this.songGain);
+  }
+
+  /** Starts measuring the next song in the queue, so it doesn't have to wait when its turn comes. */
+  private measureNextSongAhead(): void {
+    const next = this.queue[0];
+    if (!next || !this.normalizeVolumeIsOn()) return;
+    // Not loaded yet, so only YouTube songs and library files can be measured ahead (see songToMeasure).
+    const song = songToMeasure(next, null, this.manager.lavalink, (fileId) => this.manager.libraryFilePath(this.guildId, fileId));
+    if (!song) return;
+    this.manager.loudness.loudnessOf(song.key, () => measureLoudness(song.input)).catch((error: unknown) => {
+      console.warn(`[loudness] couldn't measure "${next.title}" ahead: ${error instanceof Error ? error.message : error}`);
+    });
   }
 
   /** Where the current song is, in song time (see `speedAnchor`), kept between 0 and its length. */
@@ -670,5 +753,23 @@ export class GuildPlayer {
   emitPlayerUpdate(): void {
     this.manager.saveStatus(this.savedState());
     this.manager.emit("player:update", this.guildId, this.snapshot());
+  }
+}
+
+/**
+ * What `promise` gives, if it's done within `ms` milliseconds; otherwise null. A failure counts as null too (and is
+ * logged). The promise keeps running either way: a measurement that finishes late is still remembered.
+ */
+async function waitAtMost<T>(promise: Promise<T | null>, ms: number): Promise<T | null> {
+  const failedAsNull = promise.catch((error: unknown) => {
+    console.warn(`[loudness] measuring failed: ${error instanceof Error ? error.message : error}`);
+    return null;
+  });
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<null>((resolve) => (timer = setTimeout(() => resolve(null), ms)));
+  try {
+    return await Promise.race([failedAsNull, timeout]);
+  } finally {
+    clearTimeout(timer);
   }
 }

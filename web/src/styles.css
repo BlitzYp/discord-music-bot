@@ -592,6 +592,66 @@ main > *,
   gap: 14px;
 }
 
+/* "Audio Normalization", beside Loop and the volume slider, in the same muted label colour. */
+.playback-options .normalize {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/*
+ * An on/off switch: a checkbox drawn as a rounded track with a ball that slides right when it's on.
+ * The ball is the checkbox's ::before; `appearance: none` removes the browser's own tick box.
+ */
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.switch input {
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 20px;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--muted);
+  cursor: pointer;
+  transition: background-color 0.18s ease;
+}
+
+.switch input::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--card);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+  transition: transform 0.18s ease;
+}
+
+.switch input:checked {
+  background: var(--accent);
+}
+
+.switch input:checked::before {
+  transform: translateX(14px);
+}
+
+.switch input:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.switch:has(input:checked) {
+  color: var(--text);
+}
+
 .loop,
 .volume {
   gap: 8px;
@@ -1329,7 +1389,9 @@ footer {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .fill {
+  .fill,
+  .switch input,
+  .switch input::before {
     transition: none;
   }
 }

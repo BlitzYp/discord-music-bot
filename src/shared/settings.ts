@@ -85,6 +85,11 @@ export interface GuildSettings {
   announceChannelId: string | null;
   /** Who may upload files to the server's library (see UPLOAD_PERMISSIONS in src/shared/library.ts). */
   uploadPermission: UploadPermission;
+  /**
+   * Play every song at about the same loudness, like Spotify's "Normalize volume" (src/player/loudness.ts).
+   * DJs switch it with /normalize or on the website's player, not on the Settings page.
+   */
+  normalizeVolume: boolean;
 }
 
 export const DEFAULT_GUILD_SETTINGS: GuildSettings = {
@@ -96,6 +101,7 @@ export const DEFAULT_GUILD_SETTINGS: GuildSettings = {
   leaveWhenEmptyAfterSec: 60,
   announceChannelId: null,
   uploadPermission: "dj",
+  normalizeVolume: false,
 };
 
 /** The allowed range of each number setting. The website uses them for its inputs; the server checks them. */

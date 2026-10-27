@@ -24,7 +24,7 @@ function PlaybackIcon({ name }: { name: keyof typeof ICON_PATHS }) {
   );
 }
 
-/** Pause/resume, skip, stop, loop mode and volume. Only shown to DJs. */
+/** Pause/resume, skip, stop, loop mode, volume and volume normalization. Only shown to DJs. */
 export function PlayerControls({ guildId, snapshot }: Props) {
   const { run, pending, error } = useAction();
   const playing = snapshot.current !== null;
@@ -74,6 +74,19 @@ export function PlayerControls({ guildId, snapshot }: Props) {
           disabled={!snapshot.voiceChannelId}
           onChange={(volume) => run(() => api.setVolume(guildId, volume))}
         />
+
+        {/* A server setting, so it can be switched while the bot isn't in voice too. */}
+        <label className="switch normalize" title="Play every song at about the same loudness, so a loud song after a quiet one isn't a shock">
+          {/* A real checkbox, drawn as an on/off switch by CSS (.switch), so keyboards and screen readers still work. */}
+          <input
+            type="checkbox"
+            role="switch"
+            checked={snapshot.normalizeVolume}
+            disabled={pending}
+            onChange={(event) => run(() => api.setNormalizeVolume(guildId, event.target.checked))}
+          />
+          Audio Normalization
+        </label>
       </div>
       {error && <p className="hint error-text">{error}</p>}
     </div>

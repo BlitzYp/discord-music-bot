@@ -12,6 +12,7 @@ import { PlaylistStore } from "./db/playlistStore.js";
 import { SettingsStore } from "./db/settingsStore.js";
 import { LibraryManager } from "./library/LibraryManager.js";
 import { createLavalink } from "./player/lavalink.js";
+import { LoudnessCache } from "./player/LoudnessCache.js";
 import { PlayerManager } from "./player/PlayerManager.js";
 import { clearDownloads, updateYtDlp } from "./player/resolvers/ytdlp.js";
 import { PlaylistManager } from "./playlists/PlaylistManager.js";
@@ -33,7 +34,7 @@ const client = createClient();
 const lavalink = createLavalink(client, config);
 const libraryStore = new LibraryStore(db);
 // Loads the queues saved before the last shutdown (see PlayerManager's constructor).
-const players = new PlayerManager(lavalink, settings, new PlayerStateStore(db), libraryStore);
+const players = new PlayerManager(lavalink, settings, new PlayerStateStore(db), libraryStore, new LoudnessCache(db));
 const playlists = new PlaylistManager(new PlaylistStore(db), players);
 const library = new LibraryManager(libraryStore, settings, players);
 await library.cleanUp();

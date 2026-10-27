@@ -48,6 +48,7 @@ His name, avatar and bio are set in the [Discord Developer Portal](https://disco
 | `/shuffle` | Shuffles the queue; the current track keeps playing |
 | `/loop off\|track\|queue` | Repeats nothing, the current track, or the whole queue |
 | `/volume [percent]` | Shows or sets the volume, 0–150% (100 is normal). Goes back to the server's starting volume when the bot leaves. |
+| `/normalize on\|off` | Volume normalization, like Spotify's "Normalize volume": every song plays at about the same loudness, so a loud song after a quiet one isn't a shock. Stays on for the server (also after restarts) until switched off. Needs ffmpeg. |
 | `/filter <effect>` | Adds an audio effect: nightcore, vaporwave, bassboost, 8d, karaoke or soft (`off` removes it). One at a time; it stays on for the next songs until changed or the bot leaves. |
 | `/playlist ...` | This server's saved playlists; see below |
 | `/library ...` | This server's uploaded audio files; see below |
@@ -170,7 +171,7 @@ While the bot runs, open **http://localhost:3000** (or whatever `WEB_PORT` is) a
 The **Player** tab starts with the current song, artwork, progress and playback controls. Expand **Audio effects** below the controls to pick an effect; the current effect is visible while it's closed. Type a song's name or paste a link under **Up next** to add a song. Long queues scroll inside their list, keeping the player and add-song form above them. **Recently played** sits beside the queue on wide screens and below it on smaller screens. The page uses quiet, neutral colors and follows your system's light or dark theme.
 
 - **Everyone** sees the current song with its progress bar, the active effect, the queue, and the recently played songs. Click a song's title to open it on YouTube (or wherever it's from) in a new tab.
-- **DJs** also get the controls: add a link, pause/resume, skip, stop, drag the progress bar to seek, volume, loop, effects, reorder queued songs by dragging them (or with ↑↓; dragging doesn't work on most phones), play a queued song right away (**▶**, skips the current one), remove queued songs, shuffle, clear the queue (the current song keeps playing), and the **+** button on recently played songs to add them to the queue again, or clear that list.
+- **DJs** also get the controls: add a link, pause/resume, skip, stop, drag the progress bar to seek, volume, loop, **Audio Normalization** (the same as `/normalize`), effects, reorder queued songs by dragging them (or with ↑↓; dragging doesn't work on most phones), play a queued song right away (**▶**, skips the current one), remove queued songs, shuffle, clear the queue (the current song keeps playing), and the **+** button on recently played songs to add them to the queue again, or clear that list.
 - Adding a song from the website joins the voice channel you're in, like `/play`. When you paste a link from a YouTube playlist, a checkbox offers to add the whole playlist. A Spotify album or playlist link always adds all of its songs. **Play next** (beside **Add to queue**) puts the new song, or all of a playlist's songs in order, at the front of the queue, so it plays after the current song.
 - The **Library** tab (everyone) lists the server's uploaded files, with a search box, how much space they use, and who uploaded each. Uploaders (DJs, unless a server admin changed it) get **Upload audio files**: pick one or more files and they upload one after another, with a progress bar. DJs also get **+** to add a file to the queue and **✕** to delete it.
 - The **Playlists** tab (everyone) lists the server's playlists; click one to see its songs. Everyone can add songs and remove the ones they added. DJs also get **Play** (replaces the queue; it asks first if something is queued), **Add to queue**, dragging (or ↑↓) to reorder, remove any song, **Rename**, **Delete**, a "New playlist" form (empty, or imported from a YouTube playlist link) and **Save the queue as a playlist**. Changes show up live for everyone, including ones made in Discord.
@@ -224,6 +225,7 @@ Other scripts:
 | Script | What it does |
 |---|---|
 | `npm run typecheck` | Checks the TypeScript (bot and website) for errors without running anything |
+| `npm test` | Runs the automated tests (`src/**/*.test.ts`, with Node's built-in test runner) |
 | `npm run build` | Compiles the bot to `dist/` and the website to `web/dist/` |
 | `npm start` | Runs the compiled build (use this instead of `dev` for day-to-day hosting, and always while the website is public; run `npm run build` first) |
 | `npm run funnel` | Makes the website public through Tailscale Funnel until you press Ctrl+C (see "Making the website public") |
@@ -264,6 +266,7 @@ Other scripts:
 - **"That's a YouTube mix made for your account"**: personal mixes (Replay Mix, My Supermix, Discover Mix…) exist only for you while signed in, and the bot isn't signed in to YouTube. In YouTube Music, open the mix → ⋮ → **Save to playlist**, make that playlist Public or Unlisted, and import it. Mixes started from a song (a link with both `v=` and `list=RD…`) work as they are.
 - **"YouTube says that playlist doesn't exist"**: it's private (or was deleted). Set it to Public or Unlisted in YouTube.
 - **An import has fewer songs than the YouTube playlist**: private and deleted videos are skipped, and at most 500 songs are read.
+- **Volume normalization does nothing**: it needs ffmpeg (see the next point); the bot's terminal shows `[loudness] ffmpeg couldn't measure the song` when it's missing. Livestreams and Twitch play unadjusted. A song is measured the first time it plays (about a second); if that takes longer than 3 seconds, that one play is unadjusted and the next one isn't.
 - **"ffmpeg isn't installed on the bot's computer"** when adding a file: install it (`winget install Gyan.FFmpeg`), then restart the bot from a new terminal, so it sees the updated PATH. The Admin page shows whether the bot finds ffmpeg.
 - **"That file isn't audio, or it's damaged"** / **"That file has no sound in it"**: ffmpeg couldn't find any sound in the file. Check that it plays on your computer.
 - **"The library is full"**: the server's files use up its space. Delete some on the Library tab (or with `/library delete`), or raise "Library space per server" on the Admin page.

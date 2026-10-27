@@ -10,6 +10,7 @@ import { type AddManyResult, MAX_PLAYLIST_SONGS, type PlaylistPlayMode } from ".
 import type { AudioFilter, LoopMode, PlayerSnapshot, QueueItem, QueuePlacement, Requester } from "../shared/types.js";
 import { UserError } from "./errors.js";
 import { GuildPlayer } from "./GuildPlayer.js";
+import type { LoudnessCache } from "./LoudnessCache.js";
 import { findSong, listPlaylist, type TrackMetadata } from "./resolvers/index.js";
 
 /**
@@ -69,6 +70,8 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
     private readonly store: PlayerStateStore,
     /** Where library files are, so queued files can be found when they play. */
     private readonly library: LibraryStore,
+    /** How loud songs are, for volume normalization (see src/player/loudness.ts). */
+    readonly loudness: LoudnessCache,
   ) {
     super();
     for (const saved of store.loadAll()) this.getOrCreatePlayer(saved.guildId).restore(saved);
@@ -206,6 +209,22 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
     await player.run(async () => player.setLoopMode(mode));
   }
 
+  /**
+   * Switches volume normalization on or off for the server: every song then plays at about the same loudness.
+   * Saved with the server's settings, so it stays on after the bot leaves voice or restarts.
+   */
+  async setNormalizeVolume(guildId: string, enabled: boolean): Promise<void> {
+    this.settings.updateGuild(guildId, { normalizeVolume: enabled });
+    const player = this.players.get(guildId);
+    if (player) {
+      await player.run(() => player.refreshNormalization());
+      player.emitPlayerUpdate();
+    } else {
+      // Nothing has played in this server yet, but open pages still need to see the switch move.
+      this.emit("player:update", guildId, this.getState(guildId));
+    }
+  }
+
   async setFilter(guildId: string, filter: AudioFilter): Promise<void> {
     const player = this.requirePlayer(guildId);
     await player.run(() => player.setFilter(filter));
@@ -262,6 +281,7 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
       volume: this.settings.guild(guildId).defaultVolume,
       loopMode: "off",
       filter: "off",
+      normalizeVolume: this.settings.guild(guildId).normalizeVolume,
       queue: [],
       history: [],
     };

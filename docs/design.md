@@ -154,6 +154,7 @@ Possibly needed later:
 - `queue_items(guild_id, position, item_json)`: one row per `QueueItem`; position 1 plays next
 - `history_items(guild_id, position, item_json)`: "Recently played"; position 1 is the newest (20 per server)
 - `playlists`, `playlist_items` (migration 2, milestone 7): see "Playlists".
+- `loudness(song_key PRIMARY KEY, loudness_lufs, true_peak_dbtp, measured_at)` (migration 4): each song's measured loudness, for volume normalization. Migration 4 also adds `guild_settings.normalize_volume`.
 - `library_files(id, guild_id, file_name, original_name, title, artist, duration_ms, size_bytes, uploaded_by_id, uploaded_by_name, created_at)` (migration 3, milestone 8). `file_name` is `<id>.<extension>` inside `data/library/<guild_id>/`; a full path isn't stored, so the data folder can move. Migration 3 also adds `guild_settings.upload_permission`.
 
 ### Queue persistence (built in milestone 6)
@@ -222,6 +223,13 @@ POST   /guilds/:id/playlists/from-queue               (dj) { name }
 - `npm run dev` serves the website only to local requests (Vite's dev server can serve project files); the public website is the build (`npm run build`, `npm start`).
 - Not done (the owner's choice): running as a background service (pm2, NSSM or a logon task). The owner starts Lavalink, the bot and the funnel themselves.
 
+## Volume normalization (added after milestone 9, at the owner's request)
+- Like Spotify's "Normalize volume": each song is measured once with ffmpeg (EBU R128: integrated loudness and true peak) and played with a gain that brings it to -14 LUFS, through Lavalink's volume filter. Quiet songs are raised only while their true peak stays under -1 dBTP, at most +10 dB; loud songs are lowered at most 15 dB.
+- Chosen over the LavaDSPX plugin's "normalization" filter, which only attenuates peaks: it doesn't raise quiet songs, and peak level says little about how loud a song sounds.
+- Per server, on or off, kept across restarts; DJs switch it (`/normalize`, the website's player). Off by default.
+- Measurements are cached per song in SQLite, shared by all servers. A song waits at most 3 s for its measurement; the next queued song is measured ahead. Tested 2026-10-27: about 1 s per song through the YouTube plugin's stream endpoint, 0.1 s for a library file.
+- Not measured (played unadjusted): livestreams, and links only Lavalink can read (SoundCloud and Twitch through Lavalink).
+
 ## Real-time (Socket.IO, built in milestone 4)
 - The client sends `guild:watch <id>` and joins the room `guild:<id>`. From milestone 5, the server first checks that the logged-in user is a member of that server.
 - Server → client: `state` (full snapshot on join), `queue:update`, `track:start`, `track:end`, `player:update` (position, paused, volume, loop mode, filter; about once per second while playing), `error`, `playlists:update` (milestone 7), `library:update` (milestone 8). The types live in `src/shared/types.ts`.
@@ -238,7 +246,7 @@ The Player tab puts the current song in a full-width section at the top: artwork
 The bot's Discord status says what it's doing, summed up over all servers (a bot has one status): "Listening to *title – artist*" (or "music in N servers"), "⏸ Paused: *title*", "Waiting for /resume: *title*" after a restart, "Waiting for a song · /play" in voice with an empty queue, or "Idle · /play to start" (with the idle moon). At most one update every 5 seconds. The owner can replace it with a fixed status on the Admin page (`statusOverride`); clearing that brings the automatic one back. Added at the owner's request after milestone 9 (`src/bot/presence.ts`).
 
 ### Slash commands
-`/play <song name|url> [playlist] [next]` · `/play file:<attachment> [next]` · `/playlist …` (see "Playlists") · `/skip` · `/stop` · `/pause` · `/resume` · `/queue` · `/nowplaying` · `/remove <pos>` · `/move <from> <to>` · `/playnow <pos>` · `/shuffle` · `/loop off|track|queue` · `/volume <0-150>` · `/filter <effect>` · `/seek <time>` · `/library list|play|upload|delete` · `/dashboard` (link to the website)
+`/play <song name|url> [playlist] [next]` · `/play file:<attachment> [next]` · `/playlist …` (see "Playlists") · `/skip` · `/stop` · `/pause` · `/resume` · `/queue` · `/nowplaying` · `/remove <pos>` · `/move <from> <to>` · `/playnow <pos>` · `/shuffle` · `/loop off|track|queue` · `/volume <0-150>` · `/filter <effect>` · `/normalize on|off` · `/seek <time>` · `/library list|play|upload|delete` · `/dashboard` (link to the website)
 
 `/filter` (added alongside milestone 3, at the owner's request) uses Lavalink's built-in filters: nightcore, vaporwave, bassboost, 8d, karaoke, soft, or off. One effect at a time, kept on the player until changed. The website offers the same list (`AUDIO_FILTERS` in `src/shared/filters.ts`) through `POST /guilds/:id/player/filter { filter }`, which needs DJ permission from milestone 5.
 
@@ -264,6 +272,7 @@ POST   /guilds/:id/player/seek     (dj) { positionMs }
 POST   /guilds/:id/player/volume   (dj) { volume }
 POST   /guilds/:id/player/loop     (dj) { mode }
 POST   /guilds/:id/player/filter   (dj) { filter }
+POST   /guilds/:id/player/normalize (dj) { enabled: boolean }   volume normalization, a server setting
 ```
 Built in milestone 6 (`GET /me` also gained `isOwner`, and DJ routes enforce `requireSameVoiceChannel`):
 ```

@@ -107,6 +107,9 @@ export const setVolume = (guildId: string, volume: number): State =>
   request("POST", `/guilds/${guildId}/player/volume`, { volume });
 export const setLoopMode = (guildId: string, mode: LoopMode): State =>
   request("POST", `/guilds/${guildId}/player/loop`, { mode });
+/** Volume normalization: every song at about the same loudness. A server setting; DJs switch it. */
+export const setNormalizeVolume = (guildId: string, enabled: boolean): State =>
+  request("POST", `/guilds/${guildId}/player/normalize`, { enabled });
 export const setFilter = (guildId: string, filter: AudioFilter): State =>
   request("POST", `/guilds/${guildId}/player/filter`, { filter });
 

@@ -8,6 +8,7 @@
     "start": "node dist/index.js",
     "build": "tsc && vite build --config web/vite.config.ts",
     "typecheck": "tsc --noEmit && tsc -p web --noEmit",
+    "test": "node --import tsx --test \"src/**/*.test.ts\"",
     "lavalink": "node scripts/lavalink.mjs",
     "funnel": "node scripts/funnel.mjs",
     "setup:lavalink": "node scripts/download-lavalink.mjs",

@@ -54,13 +54,15 @@ export interface PlayerSnapshot {
   volume: number;
   loopMode: LoopMode;
   filter: AudioFilter;
+  /** Whether every song plays at about the same loudness (the server's setting; /normalize). */
+  normalizeVolume: boolean;
   queue: QueueItem[];
   /** Recently played items, newest first. */
   history: QueueItem[];
 }
 
 /** The part of a snapshot that changes without the queue changing. Sent about once a second while playing. */
-export type PlayerStatus = Pick<PlayerSnapshot, "positionMs" | "paused" | "volume" | "loopMode" | "filter">;
+export type PlayerStatus = Pick<PlayerSnapshot, "positionMs" | "paused" | "volume" | "loopMode" | "filter" | "normalizeVolume">;
 
 // -------------------------------------------------------------------------------------------------
 // Web API and Socket.IO

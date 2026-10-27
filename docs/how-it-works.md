@@ -119,6 +119,17 @@ The list of effects, their descriptions and the nightcore/vaporwave speed settin
 
 To add an effect: add its name to `AUDIO_FILTERS` and a description to `FILTER_DESCRIPTIONS` in `src/shared/filters.ts`, then add a `case` in `src/player/filters.ts`. The `/filter` choices and the website's buttons are built from that list.
 
+### Volume normalization
+
+Like Spotify's "Normalize volume": with the server's `normalizeVolume` setting on (`/normalize`, or **Audio Normalization** on the website), every song plays at about -14 LUFS. It's a server setting (`guild_settings.normalize_volume`) that DJs change through `PlayerManager.setNormalizeVolume()`, not on the admins' Settings page.
+
+1. **Measuring** (`measureLoudness.ts`): ffmpeg's `ebur128` filter reads the song once and reports its integrated loudness (LUFS) and true peak. About 1 second for a whole song (at most the first 10 minutes are read). Where the audio comes from is decided by `songToMeasure.ts`: a library file or a yt-dlp download is read from disk; a YouTube song comes from the YouTube plugin's `GET /youtube/stream/<id>` (fetched in Node with the Lavalink password, then piped into ffmpeg, so the password isn't on ffmpeg's command line); a direct audio link is read as it is. Livestreams, and links only Lavalink can read (SoundCloud and Twitch through Lavalink), aren't measured and play unadjusted.
+2. **Remembering** (`LoudnessCache.ts`, table `loudness`): one row per song, keyed `youtube:<video id>`, `file:<library id>` or `url:<link>`, shared by all servers. Two requests for a song that's still being measured share one ffmpeg run; failures aren't remembered, so they're tried again next time.
+3. **The gain** (`loudness.ts`, `normalizationGain()`): target -14 LUFS. Quiet songs are turned up only as far as their peaks stay under -1 dBTP (so they don't distort), and at most +10 dB; loud songs are turned down at most 15 dB.
+4. **Applying it** (`GuildPlayer`): `playTrack()`, which every song start goes through, waits up to 3 seconds for the measurement and sets Lavalink's **volume filter** (a multiplier, 0 to 5) to the gain before the song starts. It multiplies with the player volume, so `/volume` works as before. Changing the effect resets every filter, so `setFilter()` re-applies the gain. After a song starts, `measureNextSongAhead()` measures the next queued song in the background (only YouTube songs and library files: other links' kind is known only once loaded). Switching normalization on or off applies to the current song at once (`refreshNormalization()`, which seeks in place so it's heard immediately).
+
+Tests (`npm test`): `loudness.test.ts` covers the gain and reading ffmpeg's output (with real ffmpeg output), `LoudnessCache.test.ts` the cache. Applying the gain in `GuildPlayer` isn't covered by tests; check it by ear in Discord.
+
 ### `run()`: one change at a time
 
 Every change to a `GuildPlayer` goes through `player.run(() => ...)`. That waits for the previous change in that server to finish before starting the next one. Without it, a `/skip` arriving at the same moment a track ends by itself could advance the queue twice.

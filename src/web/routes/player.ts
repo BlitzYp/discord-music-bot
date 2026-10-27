@@ -115,6 +115,13 @@ export function playerRoutes({ client, players, library, settings }: WebContext)
     return players.setFilter(guild.id, filter);
   });
 
+  // Volume normalization on or off: { enabled: boolean }. Saved as a server setting.
+  djRoute("post", "/guilds/:id/player/normalize", ({ guild }, req) => {
+    const enabled = req.body?.enabled;
+    if (typeof enabled !== "boolean") throw new UserError('"enabled" must be true or false.');
+    return players.setNormalizeVolume(guild.id, enabled);
+  });
+
   return router;
 }
 

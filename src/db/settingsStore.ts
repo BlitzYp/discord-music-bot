@@ -18,6 +18,7 @@ interface GuildSettingsRow {
   leave_after_sec: number;
   announce_channel_id: string | null;
   upload_permission: UploadPermission;
+  normalize_volume: number;
 }
 
 /**
@@ -75,6 +76,7 @@ export class SettingsStore extends EventEmitter<{ "global:change": [settings: Gl
       leaveWhenEmptyAfterSec: row.leave_after_sec,
       announceChannelId: row.announce_channel_id,
       uploadPermission: row.upload_permission,
+      normalizeVolume: row.normalize_volume === 1,
     };
   }
 
@@ -84,9 +86,11 @@ export class SettingsStore extends EventEmitter<{ "global:change": [settings: Gl
     this.db
       .prepare(
         `INSERT INTO guild_settings (guild_id, dj_role_id, default_volume, max_queue_length, max_track_duration_sec,
-                                     require_same_vc, leave_after_sec, announce_channel_id, upload_permission)
+                                     require_same_vc, leave_after_sec, announce_channel_id, upload_permission,
+                                     normalize_volume)
          VALUES (@guildId, @djRoleId, @defaultVolume, @maxQueueLength, @maxTrackDurationSec,
-                 @requireSameVoiceChannel, @leaveWhenEmptyAfterSec, @announceChannelId, @uploadPermission)
+                 @requireSameVoiceChannel, @leaveWhenEmptyAfterSec, @announceChannelId, @uploadPermission,
+                 @normalizeVolume)
          ON CONFLICT (guild_id) DO UPDATE SET
            dj_role_id = excluded.dj_role_id,
            default_volume = excluded.default_volume,
@@ -95,9 +99,15 @@ export class SettingsStore extends EventEmitter<{ "global:change": [settings: Gl
            require_same_vc = excluded.require_same_vc,
            leave_after_sec = excluded.leave_after_sec,
            announce_channel_id = excluded.announce_channel_id,
-           upload_permission = excluded.upload_permission`,
+           upload_permission = excluded.upload_permission,
+           normalize_volume = excluded.normalize_volume`,
       )
-      .run({ guildId, ...settings, requireSameVoiceChannel: settings.requireSameVoiceChannel ? 1 : 0 });
+      .run({
+        guildId,
+        ...settings,
+        requireSameVoiceChannel: settings.requireSameVoiceChannel ? 1 : 0,
+        normalizeVolume: settings.normalizeVolume ? 1 : 0,
+      });
     return settings;
   }
 }

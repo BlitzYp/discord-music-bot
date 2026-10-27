@@ -111,6 +111,21 @@ const MIGRATIONS: string[] = [
   -- Who may upload: 'dj', 'admin' or 'off' (src/shared/library.ts).
   ALTER TABLE guild_settings ADD COLUMN upload_permission TEXT NOT NULL DEFAULT 'dj';
   `,
+
+  // 4: volume normalization (added after milestone 9)
+  `
+  -- How loud each song is, measured once with ffmpeg (src/player/loudness.ts). song_key says which song:
+  -- "youtube:<video id>", "file:<library file id>" or "url:<link>". Shared by all servers.
+  CREATE TABLE loudness (
+    song_key       TEXT PRIMARY KEY,
+    loudness_lufs  REAL NOT NULL,
+    true_peak_dbtp REAL NOT NULL,
+    measured_at    INTEGER NOT NULL
+  );
+
+  -- Whether the server plays every song at about the same loudness (DJs switch it with /normalize). 0 or 1.
+  ALTER TABLE guild_settings ADD COLUMN normalize_volume INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 /** Brings the database up to date by running the migrations it hasn't run yet. */
