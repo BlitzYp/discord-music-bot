@@ -142,6 +142,12 @@ Tests (`npm test`): `loudness.test.ts` covers the gain and reading ffmpeg's outp
 
 Because steps 3 to 5 are one `run()` task, a /skip or /seek that arrives during the speech waits, then acts on the song. While it speaks, `songPositionMs()` returns the remembered position and the snapshot's `announcing` is true, so the website's progress bar stands still and says "Paused for an announcement". `onTrackError()` and `onTrackStuck()` leave the song alone during an announcement; a speech that fails is reported as "The announcement couldn't be played". If the bot is disconnected mid-speech, `reset()` ends the wait.
 
+#### Voices
+
+`src/shared/voices.ts` lists the voices on offer (`VOICES`); `src/tts/voices.ts` knows which are on disk (`bin/piper/voices/<id>.onnx` plus `.onnx.json`), downloads them (each file under a `.part` name first, renamed when complete; two clicks share one download) and deletes them. `synthesizeSpeech(text, { voiceId, speed })` picks the voice with `voiceToUse()`: the server's choice if it's downloaded, else the default, else any downloaded one. It passes `--length_scale 1/speed` to Piper (Piper's setting is how long each sound lasts, so 2× speed is 0.5). `PlayerManager.prepareSpeech()` reads the server's `voiceId` and `speechSpeed` settings for every announcement.
+
+The website: `GET/POST/DELETE /admin/voices[/:voiceId]` (owner) for the Admin page's Voices card; the Settings page gets the downloaded voices in its settings response, and its ▶ Listen button plays `GET /guilds/:id/voice-sample?voiceId=&speed=` (admins), a sample sentence in the voice's language made on the spot.
+
 #### Automatic announcements
 
 The server's `autoAnnouncements` setting (`src/shared/settings.ts`) holds four: song start, playlist start, someone joining, someone leaving. Each has `enabled` and a `message` whose `{words}` `fillMessage()` (`src/tts/messages.ts`) fills in.

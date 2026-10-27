@@ -200,7 +200,7 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
       const player = this.getOrCreatePlayer(guildId);
       // Join voice before making the speech, so "join a voice channel first" comes back immediately.
       await player.run(() => player.ensureConnected(request.voiceChannelId, request.textChannelId));
-      const speech = await this.prepareSpeech(cleaned, announcedBy);
+      const speech = await this.prepareSpeech(guildId, cleaned, announcedBy);
       speechPath = speech.path;
       await player.run(() => player.announce(speech.track, request.voiceChannelId, request.textChannelId));
     } finally {
@@ -221,11 +221,16 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
   }
 
   /**
-   * Makes the speech for `text` (Piper) and loads it in Lavalink. The caller deletes the file (`path`) once it has been
-   * said, with deleteSpeechFile().
+   * Makes the speech for `text` (Piper) in the server's voice and speed, and loads it in Lavalink. The caller deletes
+   * the file (`path`) once it has been said, with deleteSpeechFile().
    */
-  async prepareSpeech(text: string, requester: Requester = AUTOMATIC_ANNOUNCER): Promise<{ track: Track; path: string }> {
-    const path = await synthesizeSpeech(text);
+  async prepareSpeech(
+    guildId: string,
+    text: string,
+    requester: Requester = AUTOMATIC_ANNOUNCER,
+  ): Promise<{ track: Track; path: string }> {
+    const { voiceId, speechSpeed } = this.settings.guild(guildId);
+    const path = await synthesizeSpeech(text, { voiceId, speed: speechSpeed });
     try {
       return { track: await loadFileWithLavalink(this.lavalink, path, requester), path };
     } catch (error) {

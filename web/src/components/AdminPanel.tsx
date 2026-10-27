@@ -16,6 +16,7 @@ import {
 } from "../shared";
 import { useAction } from "../useAction";
 import { Field, NumberInput } from "./GuildSettingsForm";
+import { VoicesCard } from "./VoicesCard";
 
 const YOUTUBE_MODE_LABELS: Record<YoutubeMode, string> = {
   auto: "Automatic: Lavalink's YouTube plugin, yt-dlp if it fails (recommended)",
@@ -51,6 +52,7 @@ export function AdminPanel() {
   return (
     <main>
       <GlobalSettingsForm />
+      <VoicesCard />
       <StatusCard />
     </main>
   );

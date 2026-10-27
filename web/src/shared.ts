@@ -5,6 +5,8 @@ export { AUDIO_FILTERS, FILTER_DESCRIPTIONS, playbackRate } from "../../src/shar
 export { hasLevel, type PermissionLevel } from "../../src/shared/permissions";
 export { MAX_VOLUME } from "../../src/shared/player";
 export { MAX_ANNOUNCEMENT_LENGTH } from "../../src/shared/announcements";
+export { DEFAULT_VOICE_ID, LANGUAGE_NAMES, SPEECH_SPEED_LIMITS } from "../../src/shared/voices";
+export type { Voice, VoiceLanguage, VoiceStatus } from "../../src/shared/voices";
 export {
   AUTO_ANNOUNCEMENT_WORDS,
   BOT_STATUS_DOTS,

@@ -4,9 +4,9 @@ import KuromojiAnalyzer from "kuroshiro-analyzer-kuromoji";
 import { pinyin } from "pinyin-pro";
 
 /**
- * Piper's English voice can only read Latin letters (accents are fine) and Korean. For anything else it says the
- * alphabet's name: 夜に駆ける comes out as "Japanese letter, Japanese letter…". So before speaking, other writing is
- * spelled in Latin letters, the way it's pronounced:
+ * Piper's voices (English, German, Latvian) can only read Latin letters (accents are fine) and Korean. For anything
+ * else they say the alphabet's name: 夜に駆ける comes out as "Japanese letter, Japanese letter…". So before speaking, other
+ * writing is spelled in Latin letters, the way it's pronounced:
  * - Japanese → romaji with kuroshiro (夜に駆ける → "yoru ni kakeru"). Its dictionary tells which reading a kanji has.
  * - Chinese → pinyin without tone marks (北京 → "bei jing").
  * - Other alphabets (Cyrillic, Greek, Arabic…) → any-ascii (Привет → "Privet").
@@ -27,7 +27,7 @@ const JAPANESE_RUN = /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}ー�
 const KANA = /[\p{Script=Hiragana}\p{Script=Katakana}]/u;
 const CHINESE_RUN = /\p{Script=Han}+/gu;
 /**
- * Letters the voice can't read: anything that isn't Latin, Korean (Hangul, which Piper reads itself), or shared by
+ * Letters the voices can't read: anything that isn't Latin, Korean (Hangul, which Piper reads itself), or shared by
  * every language (digits, punctuation, spaces, emoji).
  */
 const OTHER_ALPHABET_RUN = /[^\p{Script=Latin}\p{Script=Hangul}\p{Script=Common}\p{Script=Inherited}]+/gu;
@@ -35,7 +35,7 @@ const OTHER_ALPHABET_RUN = /[^\p{Script=Latin}\p{Script=Hangul}\p{Script=Common}
 /** The Japanese converter. Loading its dictionary takes about a third of a second, so it's done once, when first needed. */
 let japanese: Promise<InstanceType<typeof kuroshiroModule.default>> | null = null;
 
-/** `text` with everything Piper's English voice can't read spelled in Latin letters. */
+/** `text` with everything Piper's voices can't read spelled in Latin letters. */
 export async function spellForSpeech(text: string): Promise<string> {
   // split() with a capturing group keeps the punctuation between the phrases, so it's put back as it was.
   const pieces = text.split(PHRASE_END);

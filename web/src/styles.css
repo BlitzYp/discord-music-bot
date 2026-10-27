@@ -1050,6 +1050,64 @@ main > *,
   flex-basis: 100%;
 }
 
+/* The voice select with its Listen button beside it. */
+.voice-picker,
+.speed-input {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.voice-picker select {
+  flex: 1;
+}
+
+.voice-picker button {
+  flex-shrink: 0;
+}
+
+.speed-input input[type="range"] {
+  flex: 1;
+  max-width: 320px;
+}
+
+/* The Admin page's voices, grouped by language. */
+.voice-group h4 {
+  margin: 20px 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.voice-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.voice-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.voice-name {
+  min-width: 9em;
+  font-weight: 500;
+}
+
+.voice-description {
+  flex: 1;
+  min-width: 12em;
+}
+
+.voice-action {
+  margin-left: auto;
+}
+
 .field {
   display: grid;
   grid-template-columns: 200px minmax(0, 1fr);

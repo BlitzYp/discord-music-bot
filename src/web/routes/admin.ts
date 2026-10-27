@@ -12,6 +12,7 @@ import {
   MAX_BOT_STATUS_LENGTH,
   YOUTUBE_MODES,
 } from "../../shared/settings.js";
+import { deleteVoice, downloadVoice, voiceStatuses } from "../../tts/voices.js";
 import { requireOwner } from "../access.js";
 import { parseBody, route } from "../http.js";
 import type { WebContext } from "../server.js";
@@ -77,6 +78,35 @@ export function adminRoutes({ client, players, settings }: WebContext): Router {
         discordStatus: currentStatus(client, players, settings),
       };
       res.json(status);
+    }),
+  );
+
+  // ---- Voices for text-to-speech (src/tts/voices.ts) ----
+
+  router.get(
+    "/admin/voices",
+    route(async (req, res) => {
+      requireOwner(req);
+      res.json(voiceStatuses());
+    }),
+  );
+
+  /** Downloads a voice (about 60 MB). Answers once it's done, which can take half a minute. */
+  router.post(
+    "/admin/voices/:voiceId",
+    route(async (req, res) => {
+      requireOwner(req);
+      await downloadVoice(req.params.voiceId as string);
+      res.json(voiceStatuses());
+    }),
+  );
+
+  router.delete(
+    "/admin/voices/:voiceId",
+    route(async (req, res) => {
+      requireOwner(req);
+      await deleteVoice(req.params.voiceId as string);
+      res.json(voiceStatuses());
     }),
   );
 

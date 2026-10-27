@@ -14,6 +14,7 @@ import type {
   PlaylistDetails,
   PlaylistPlayMode,
   PlaylistSummary,
+  VoiceStatus,
 } from "./shared";
 
 /** An error answer from the bot's API, with its HTTP status (401 = not logged in). */
@@ -194,6 +195,9 @@ export const fetchGuildSettings = (guildId: string): Promise<GuildSettingsRespon
 /** Saves the given settings; the others stay as they are. */
 export const updateGuildSettings = (guildId: string, changes: Partial<GuildSettings>): Promise<GuildSettingsResponse> =>
   request("PATCH", `/guilds/${guildId}/settings`, changes);
+/** Where a voice sample can be played from (a WAV file), for the Settings page's Listen button. */
+export const voiceSampleUrl = (guildId: string, voiceId: string, speed: number): string =>
+  `/api/guilds/${guildId}/voice-sample?${new URLSearchParams({ voiceId, speed: String(speed) })}`;
 
 // ---- The Admin page (bot owner) ----
 
@@ -203,3 +207,10 @@ export const updateGlobalSettings = (changes: Partial<GlobalSettings>): Promise<
 export const fetchAdminStatus = (): Promise<AdminStatus> => request("GET", "/admin/status");
 /** Updates yt-dlp now. Answers with yt-dlp's last line of output, e.g. "yt-dlp is up to date (2026.10.01)". */
 export const updateYtDlpNow = (): Promise<{ message: string }> => request("POST", "/admin/ytdlp/update");
+/** Every voice on offer, and whether it's downloaded. */
+export const fetchVoices = (): Promise<VoiceStatus[]> => request("GET", "/admin/voices");
+/** Downloads a voice (about 60 MB). Answers once it's done. */
+export const downloadVoice = (voiceId: string): Promise<VoiceStatus[]> =>
+  request("POST", `/admin/voices/${encodeURIComponent(voiceId)}`);
+export const deleteVoice = (voiceId: string): Promise<VoiceStatus[]> =>
+  request("DELETE", `/admin/voices/${encodeURIComponent(voiceId)}`);

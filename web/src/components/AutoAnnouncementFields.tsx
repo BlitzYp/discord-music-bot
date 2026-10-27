@@ -31,7 +31,7 @@ interface Props {
 }
 
 /**
- * The Settings page's "Spoken announcements": what the bot says by itself in the voice channel, and when.
+ * The Settings page's automatic announcements: what the bot says by itself in the voice channel, and when.
  * Each one has an on/off switch and its own message.
  */
 export function AutoAnnouncementFields({ value, onChange }: Props) {
@@ -41,14 +41,6 @@ export function AutoAnnouncementFields({ value, onChange }: Props) {
 
   return (
     <>
-      <div className="settings-section-heading">
-        <h3>Spoken announcements</h3>
-        <p className="muted hint">
-          The bot says these in its voice channel by itself. The song pauses while it speaks. Words in {"{curly brackets}"} are
-          filled in.
-        </p>
-      </div>
-
       {(Object.keys(LABELS) as AutoAnnouncementKind[]).map((kind) => (
         <AutoAnnouncementField key={kind} kind={kind} announcement={value[kind]} onChange={(changes) => change(kind, changes)}>
           {kind === "songStart" && (

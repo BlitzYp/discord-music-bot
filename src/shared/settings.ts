@@ -3,6 +3,7 @@
 
 import type { UploadPermission } from "./library.js";
 import { MAX_VOLUME } from "./player.js";
+import type { Voice } from "./voices.js";
 
 /**
  * How YouTube links are loaded:
@@ -92,6 +93,13 @@ export interface GuildSettings {
   normalizeVolume: boolean;
   /** What the bot says in voice by itself (text-to-speech), and when. See AutoAnnouncements. */
   autoAnnouncements: AutoAnnouncements;
+  /**
+   * The voice for every announcement (/announce and the automatic ones): one of VOICES in src/shared/voices.ts.
+   * null = the default voice. A voice the owner deleted falls back to the default too.
+   */
+  voiceId: string | null;
+  /** How fast the bot speaks: 1 is the voice's normal speed (SPEECH_SPEED_LIMITS in src/shared/voices.ts). */
+  speechSpeed: number;
 }
 
 /**
@@ -154,6 +162,8 @@ export const DEFAULT_GUILD_SETTINGS: GuildSettings = {
   uploadPermission: "dj",
   normalizeVolume: false,
   autoAnnouncements: DEFAULT_AUTO_ANNOUNCEMENTS,
+  voiceId: null,
+  speechSpeed: 1,
 };
 
 /** The allowed range of each number setting. The website uses them for its inputs; the server checks them. */
@@ -175,6 +185,8 @@ export interface GuildSettingsResponse {
   roles: { id: string; name: string; color: string | null }[];
   /** Text channels the bot can post "Now playing" messages in. */
   textChannels: { id: string; name: string }[];
+  /** The voices the server can pick: the ones the bot owner has downloaded. */
+  voices: Voice[];
 }
 
 /** GET /api/admin/status: how the parts of the bot are doing, for the owner's Admin page. */

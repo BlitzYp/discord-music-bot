@@ -492,7 +492,7 @@ export class GuildPlayer {
     const text = this.introText();
     if (!text) return;
     try {
-      const speech = await this.manager.prepareSpeech(text);
+      const speech = await this.manager.prepareSpeech(this.guildId, text);
       try {
         await this.speak(player, speech.track, { continueSong: false });
       } finally {

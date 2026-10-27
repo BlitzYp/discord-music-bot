@@ -125,7 +125,7 @@ npm run setup:piper
 ```
 
 - `setup:lavalink` downloads `lavalink/Lavalink.jar`. Lavalink downloads its YouTube plugin by itself the first time it starts.
-- `setup:piper` downloads Piper, the offline text-to-speech program behind `/announce`, into `bin/piper/` (about 85 MB with its voice). Nothing you type for announcements leaves your PC. The voice speaks English; Japanese, Chinese, Russian and other titles are read the way they'd be spelled in Latin letters (夜に駆ける as "yoru ni kakeru"), with an English accent. Other voices can be downloaded with `npm run setup:piper -- <voice>` (listen to them at [piper-samples](https://rhasspy.github.io/piper-samples/)), but the bot only uses `en_US-lessac-medium` for now.
+- `setup:piper` downloads Piper, the offline text-to-speech program behind `/announce`, into `bin/piper/` (about 85 MB with its voice). Nothing you type for announcements leaves your PC. It downloads one voice (Lessac, American English); more English, German and Latvian voices can be downloaded on the Admin page later. Japanese, Chinese, Russian and other titles are read the way they'd be spelled in Latin letters (夜に駆ける as "yoru ni kakeru"), with the voice's accent.
 - `setup:ytdlp` downloads yt-dlp into `bin/`. The bot updates it on every start, because YouTube changes often break old versions. (A system-wide yt-dlp also works if `bin/` has none.)
 
 ### 3. Create the Discord application
@@ -190,9 +190,10 @@ The **Player** tab starts with the current song, artwork, progress and playback 
   | Leave an empty channel after | How long the bot stays alone in voice before leaving (default 60 s; 0 = never). |
   | Announce songs in | A text channel where the bot posts "Now playing …" for every new song (default: off). |
   | Who can upload to the library | DJs (and admins), only admins, or nobody (default: DJs). |
+  | Voice and speaking speed | The voice for announcements (from the voices the bot owner downloaded) and how fast it speaks, 0.5× to 2×. **▶ Listen** plays a sample in your browser. With a German or Latvian voice, write the messages below in that language too. |
   | Spoken announcements | Things the bot says by itself in its voice channel, each switched on separately with its own message (all off by default): **before a song** ("Now playing {song}, requested by {user}."), for every song or only when the music starts after nothing was playing; **when a playlist starts**; **when someone joins** ("Welcome, {name}!"); **when someone leaves**. Words in `{curly brackets}` are filled in; under each message the page lists the ones it can use. People joining or leaving together are named together, and someone hopping in and out isn't announced again within a minute. Needs Piper, like `/announce`. |
 
-- **You (the bot owner)** also get an **Admin** button at the top: how YouTube links are loaded (automatic, only Lavalink's plugin, or only yt-dlp), whether yt-dlp updates on every start, an "Update now" button for yt-dlp, the largest library upload and the library space per server, Brick Maback's Discord status (automatic, or a custom one), and the status of the bot, Lavalink, yt-dlp and ffmpeg, plus the Discord status he shows right now.
+- **You (the bot owner)** also get an **Admin** button at the top: how YouTube links are loaded (automatic, only Lavalink's plugin, or only yt-dlp), whether yt-dlp updates on every start, an "Update now" button for yt-dlp, the largest library upload and the library space per server, Brick Maback's Discord status (automatic, or a custom one), the **Voices** list (download or delete the voices servers can choose for announcements; about 63 MB each), and the status of the bot, Lavalink, yt-dlp and ffmpeg, plus the Discord status he shows right now.
 
 Settings apply right away; there's nothing to restart.
 

@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { ChannelType, type Guild, PermissionFlagsBits } from "discord.js";
 import { Router } from "express";
 import { z } from "zod";
@@ -9,6 +10,9 @@ import {
   SETTING_LIMITS,
   SONG_START_WHEN,
 } from "../../shared/settings.js";
+import { findVoice, SPEECH_SPEED_LIMITS } from "../../shared/voices.js";
+import { deleteSpeechFile, synthesizeSpeech } from "../../tts/speech.js";
+import { downloadedVoices, isVoiceDownloaded, SAMPLE_SENTENCES } from "../../tts/voices.js";
 import { requireGuildAccess } from "../access.js";
 import { parseBody, route } from "../http.js";
 import type { WebContext } from "../server.js";
@@ -44,6 +48,8 @@ const guildSettingsChanges = z
         memberLeave: autoAnnouncement,
       })
       .strict(),
+    voiceId: z.string().nullable(),
+    speechSpeed: z.number().min(SPEECH_SPEED_LIMITS.min).max(SPEECH_SPEED_LIMITS.max),
   })
   .partial()
   .strict();
@@ -71,10 +77,35 @@ export function settingsRoutes({ client, settings }: WebContext): Router {
       if (changes.announceChannelId && !announceChannels(guild).some((c) => c.id === changes.announceChannelId)) {
         throw new UserError("The bot can't post in that channel.");
       }
+      if (changes.voiceId && !isVoiceDownloaded(changes.voiceId)) {
+        throw new UserError("That voice isn't downloaded. The bot owner can download it on the Admin page.");
+      }
 
       const updated = settings.updateGuild(guild.id, changes);
       console.log(`[web] ${user.name} changed the settings of "${guild.name}": ${JSON.stringify(changes)}`);
       res.json(settingsResponse(guild, updated));
+    }),
+  );
+
+  // A short sample of a voice at a speed, as a WAV file, for the Settings page's Listen button. It plays in the
+  // admin's browser; nothing is said in voice. ?voiceId=<id>&speed=<number>
+  router.get(
+    "/guilds/:id/voice-sample",
+    route(async (req, res) => {
+      await requireGuildAccess(req, { client, settings }, "admin");
+      const voice = findVoice(String(req.query.voiceId));
+      if (!voice || !isVoiceDownloaded(voice.id)) throw new UserError("That voice isn't downloaded.");
+      const speed = Number(req.query.speed);
+      if (!(speed >= SPEECH_SPEED_LIMITS.min && speed <= SPEECH_SPEED_LIMITS.max)) {
+        throw new UserError(`The speed must be from ${SPEECH_SPEED_LIMITS.min} to ${SPEECH_SPEED_LIMITS.max}.`);
+      }
+
+      const path = await synthesizeSpeech(SAMPLE_SENTENCES[voice.language], { voiceId: voice.id, speed });
+      try {
+        res.type("audio/wav").send(await readFile(path));
+      } finally {
+        await deleteSpeechFile(path);
+      }
     }),
   );
 
@@ -91,6 +122,7 @@ function settingsResponse(guild: Guild, guildSettings: GuildSettingsResponse["se
     settings: guildSettings,
     roles,
     textChannels: announceChannels(guild).map((channel) => ({ id: channel.id, name: channel.name })),
+    voices: downloadedVoices(),
   };
 }
 

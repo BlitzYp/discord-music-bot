@@ -1,6 +1,6 @@
 // Downloads Piper (offline text-to-speech, used for /announce) into bin/piper/, plus one voice into bin/piper/voices/.
 // Usage: npm run setup:piper [-- <voice>]   e.g. npm run setup:piper -- en_GB-alan-medium
-// Voices to choose from: https://rhasspy.github.io/piper-samples/
+// More voices are easier to get on the website's Admin page; the bot only uses voices listed in src/shared/voices.ts.
 import { execFileSync } from "node:child_process";
 import { createWriteStream, existsSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";

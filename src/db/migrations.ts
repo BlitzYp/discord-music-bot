@@ -133,6 +133,14 @@ const MIGRATIONS: string[] = [
   -- NULL = the defaults (all off).
   ALTER TABLE guild_settings ADD COLUMN auto_announcements TEXT;
   `,
+
+  // 6: a voice and speaking speed per server (added after milestone 9)
+  `
+  -- The voice for announcements (VOICES in src/shared/voices.ts); NULL = the default voice.
+  ALTER TABLE guild_settings ADD COLUMN voice_id TEXT;
+  -- How fast it speaks; 1 = the voice's normal speed.
+  ALTER TABLE guild_settings ADD COLUMN speech_speed REAL NOT NULL DEFAULT 1;
+  `,
 ];
 
 /** Brings the database up to date by running the migrations it hasn't run yet. */

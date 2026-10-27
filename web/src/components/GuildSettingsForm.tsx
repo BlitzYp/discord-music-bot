@@ -9,6 +9,7 @@ const UPLOAD_PERMISSION_LABELS: Record<UploadPermission, string> = {
 };
 import { useAction } from "../useAction";
 import { AutoAnnouncementFields } from "./AutoAnnouncementFields";
+import { VoiceFields } from "./VoiceFields";
 
 /** A server's settings page (DJ role, volume, limits...). Only shown to server admins; the bot checks again. */
 export function GuildSettingsForm({ guildId }: { guildId: string }) {
@@ -148,6 +149,21 @@ export function GuildSettingsForm({ guildId }: { guildId: string }) {
         </select>
       </Field>
 
+      <div className="settings-section-heading">
+        <h3>Spoken announcements</h3>
+        <p className="muted hint">
+          What the bot says in its voice channel: /announce, and the announcements switched on below, which it makes by
+          itself. The song pauses while it speaks. Words in {"{curly brackets}"} are filled in.
+        </p>
+      </div>
+      <VoiceFields
+        guildId={guildId}
+        voices={loaded.voices}
+        voiceId={draft.voiceId}
+        speed={draft.speechSpeed}
+        onVoiceChange={(id) => change("voiceId", id)}
+        onSpeedChange={(value) => change("speechSpeed", value)}
+      />
       <AutoAnnouncementFields value={draft.autoAnnouncements} onChange={(value) => change("autoAnnouncements", value)} />
 
       <div className="save-row">

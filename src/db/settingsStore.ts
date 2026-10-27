@@ -23,6 +23,8 @@ interface GuildSettingsRow {
   normalize_volume: number;
   /** JSON, or null for the defaults. */
   auto_announcements: string | null;
+  voice_id: string | null;
+  speech_speed: number;
 }
 
 /**
@@ -82,6 +84,8 @@ export class SettingsStore extends EventEmitter<{ "global:change": [settings: Gl
       uploadPermission: row.upload_permission,
       normalizeVolume: row.normalize_volume === 1,
       autoAnnouncements: readAutoAnnouncements(row.auto_announcements),
+      voiceId: row.voice_id,
+      speechSpeed: row.speech_speed,
     };
   }
 
@@ -92,10 +96,10 @@ export class SettingsStore extends EventEmitter<{ "global:change": [settings: Gl
       .prepare(
         `INSERT INTO guild_settings (guild_id, dj_role_id, default_volume, max_queue_length, max_track_duration_sec,
                                      require_same_vc, leave_after_sec, announce_channel_id, upload_permission,
-                                     normalize_volume, auto_announcements)
+                                     normalize_volume, auto_announcements, voice_id, speech_speed)
          VALUES (@guildId, @djRoleId, @defaultVolume, @maxQueueLength, @maxTrackDurationSec,
                  @requireSameVoiceChannel, @leaveWhenEmptyAfterSec, @announceChannelId, @uploadPermission,
-                 @normalizeVolume, @autoAnnouncements)
+                 @normalizeVolume, @autoAnnouncements, @voiceId, @speechSpeed)
          ON CONFLICT (guild_id) DO UPDATE SET
            dj_role_id = excluded.dj_role_id,
            default_volume = excluded.default_volume,
@@ -106,7 +110,9 @@ export class SettingsStore extends EventEmitter<{ "global:change": [settings: Gl
            announce_channel_id = excluded.announce_channel_id,
            upload_permission = excluded.upload_permission,
            normalize_volume = excluded.normalize_volume,
-           auto_announcements = excluded.auto_announcements`,
+           auto_announcements = excluded.auto_announcements,
+           voice_id = excluded.voice_id,
+           speech_speed = excluded.speech_speed`,
       )
       .run({
         guildId,
