@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useId, useState } from "react";
 import * as api from "../api";
 import { formatDuration, MAX_PLAYLIST_NAME_LENGTH, type PlaylistSummary } from "../shared";
 import { socket } from "../socket";
@@ -11,7 +11,7 @@ interface Props {
   userId: string;
   /** Whether the user is a DJ (create, import, play, rename, delete, reorder). */
   canControl: boolean;
-  /** How many songs are playing or queued right now: "Play" asks before replacing them, "Save the queue" needs some. */
+  /** How many songs are playing or queued right now: "Play" asks before replacing them. */
   queuedSongs: number;
 }
 
@@ -50,7 +50,7 @@ export function PlaylistsPage({ guildId, userId, canControl, queuedSongs }: Prop
         <h3>Playlists</h3>
         {playlists.length === 0 ? (
           <p className="muted">
-            No playlists yet.{canControl ? " Create one below, or import one from YouTube." : " A DJ can create one."}
+            No playlists yet.{canControl ? " Create one below, or import one from YouTube or Spotify." : " A DJ can create one."}
           </p>
         ) : (
           <ul className="playlists">
@@ -70,7 +70,7 @@ export function PlaylistsPage({ guildId, userId, canControl, queuedSongs }: Prop
             ))}
           </ul>
         )}
-        {canControl && <NewPlaylistForm guildId={guildId} queuedSongs={queuedSongs} onCreated={setSelectedId} />}
+        {canControl && <NewPlaylistForm key={guildId} guildId={guildId} onCreated={setSelectedId} />}
       </section>
 
       {selectedId !== null && selectedStillExists && (
@@ -108,74 +108,88 @@ function usePlaylistChanges(guildId: string): number {
 
 interface NewPlaylistFormProps {
   guildId: string;
-  queuedSongs: number;
   /** Opens the new playlist. */
   onCreated: (playlistId: number) => void;
 }
 
-/** DJs: create an empty playlist, import one from YouTube, or save the queue as one. */
-function NewPlaylistForm({ guildId, queuedSongs, onCreated }: NewPlaylistFormProps) {
+/** DJs can create an empty playlist, or reveal the optional import form. */
+function NewPlaylistForm({ guildId, onCreated }: NewPlaylistFormProps) {
+  const formId = useId();
   const [name, setName] = useState("");
   const [importLink, setImportLink] = useState("");
+  const [importExpanded, setImportExpanded] = useState(false);
   const { run, pending, error } = useAction();
-  const isImport = importLink.trim() !== "";
+  const canSubmit = importExpanded ? Boolean(importLink.trim()) : Boolean(name.trim());
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (pending || !canSubmit) return;
     await run(async () => {
-      const created = isImport
-        ? await api.importPlaylist(guildId, importLink, name.trim() || undefined)
-        : await api.createPlaylist(guildId, name);
+      const created = importExpanded
+        ? await api.importPlaylist(guildId, importLink.trim(), name.trim() || undefined)
+        : await api.createPlaylist(guildId, name.trim());
       setName("");
       setImportLink("");
+      setImportExpanded(false);
       onCreated(created.id);
     });
   }
 
-  async function saveQueue() {
-    const queueName = prompt("Name for the new playlist (it gets the current song and the whole queue):");
-    if (!queueName?.trim()) return;
-    await run(async () => onCreated((await api.saveQueueAsPlaylist(guildId, queueName)).id));
-  }
-
   return (
-    <form className="new-playlist" onSubmit={submit}>
-      <h4>New playlist</h4>
-      <div className="add-song">
+    <form className="new-playlist playlist-create" onSubmit={submit}>
+      <div className="playlist-create-heading">
+        <h4>New playlist</h4>
+        <p className="muted hint">Give your next collection a name.</p>
+      </div>
+      <label className="field-label" htmlFor={`${formId}-name`}>
+        Playlist name {importExpanded && <span className="muted">(optional)</span>}
+      </label>
+      <div className="playlist-name-row">
         <input
+          id={`${formId}-name`}
           type="text"
-          placeholder={isImport ? "Name (optional: uses the linked playlist's name)" : "Name"}
-          aria-label="Playlist name"
+          placeholder="e.g. Late-night favorites"
           maxLength={MAX_PLAYLIST_NAME_LENGTH}
           value={name}
           onChange={(event) => setName(event.target.value)}
           disabled={pending}
+          required={!importExpanded}
+          aria-describedby={importExpanded ? `${formId}-name-hint` : undefined}
         />
+        <button type="submit" className="primary" disabled={pending || !canSubmit}>
+          {pending ? (importExpanded ? "Importing…" : "Creating…") : importExpanded ? "Import playlist" : "Create playlist"}
+        </button>
       </div>
-      <div className="add-song">
+      {importExpanded && <p id={`${formId}-name-hint`} className="muted hint">Leave the name blank to use the linked playlist's name.</p>}
+      <button
+        type="button"
+        className="playlist-import-toggle"
+        aria-expanded={importExpanded}
+        aria-controls={`${formId}-import`}
+        disabled={pending}
+        onClick={() => setImportExpanded(!importExpanded)}
+      >
+        <span aria-hidden="true">{importExpanded ? "−" : "+"}</span>
+        Import from YouTube or Spotify
+      </button>
+      <div id={`${formId}-import`} className="playlist-import-fields" hidden={!importExpanded}>
+        <label className="field-label" htmlFor={`${formId}-link`}>Playlist or album link</label>
         <input
+          id={`${formId}-link`}
           type="url"
-          placeholder="Optional: a YouTube playlist or Spotify album/playlist link to import"
-          aria-label="YouTube playlist or Spotify album/playlist link to import"
+          placeholder="Paste a YouTube playlist or Spotify link"
           value={importLink}
           onChange={(event) => setImportLink(event.target.value)}
-          disabled={pending}
+          disabled={pending || !importExpanded}
+          required={importExpanded}
+          aria-describedby={`${formId}-import-hint`}
         />
-        <button type="submit" disabled={pending || (!isImport && !name.trim())}>
-          {pending ? "Working…" : isImport ? "Import" : "Create"}
-        </button>
+        <p id={`${formId}-import-hint`} className="muted hint">
+          YouTube: up to 500 songs. Spotify: up to 100. Songs load when played.
+        </p>
       </div>
-      <p className="muted hint">
-        {pending && isImport
-          ? "Reading the playlist (a few seconds; Spotify ones take longer, each song is looked up on YouTube)…"
-          : "Importing reads up to 500 songs; they're loaded only when they play."}
-      </p>
-      <p className="hint">
-        <button type="button" className="small" disabled={pending || queuedSongs === 0} onClick={saveQueue}>
-          Save the queue as a playlist
-        </button>
-      </p>
-      {error && <p className="hint error-text">{error}</p>}
+      {pending && importExpanded && <p className="muted hint" role="status">Reading the playlist. Spotify imports can take a little longer.</p>}
+      {error && <p className="hint error-text" role="alert">{error}</p>}
     </form>
   );
 }

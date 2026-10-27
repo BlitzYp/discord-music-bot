@@ -1,14 +1,17 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useId, useRef, useState } from "react";
 import * as api from "../api";
 import { formatDuration, type QueueItem } from "../shared";
 import { useAction } from "../useAction";
 import { useDragReorder } from "../useDragReorder";
+import { SaveQueuePlaylist } from "./SaveQueuePlaylist";
 import { SongTitle } from "./SongTitle";
 import { TrackArtwork } from "./TrackArtwork";
 
 interface Props {
   guildId: string;
   queue: QueueItem[];
+  /** The queue-save action also includes the currently playing song. */
+  hasCurrentTrack: boolean;
   /** Whether the user is a DJ (shows the play now/move/remove buttons, Shuffle and Clear, and allows dragging). */
   canControl: boolean;
   /** The add-song form lives with the queue; members don't get one. */
@@ -16,13 +19,23 @@ interface Props {
 }
 
 /** The tracks waiting to play, numbered like /queue in Discord. DJs can drag them to reorder. */
-export function QueueList({ guildId, queue, canControl, children }: Props) {
+export function QueueList({ guildId, queue, hasCurrentTrack, canControl, children }: Props) {
+  const saveFormId = useId();
+  const saveButtonRef = useRef<HTMLButtonElement>(null);
+  const [saveFormOpen, setSaveFormOpen] = useState(false);
+  const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const totalSongs = queue.length + (hasCurrentTrack ? 1 : 0);
   const { run, pending, error } = useAction();
   const { rowProps } = useDragReorder(queue, (item, position) => run(() => api.moveInQueue(guildId, item.id, position)), {
     enabled: canControl && !pending,
   });
 
   const totalMs = queue.reduce((sum, item) => sum + (item.durationMs ?? 0), 0);
+
+  function closeSaveForm() {
+    setSaveFormOpen(false);
+    saveButtonRef.current?.focus();
+  }
 
   function clear() {
     // Can't be undone, so ask first. The current track keeps playing.
@@ -39,20 +52,51 @@ export function QueueList({ guildId, queue, canControl, children }: Props) {
             {queue.length} {queue.length === 1 ? "track" : "tracks"} · {formatDuration(totalMs)}
           </p>
         </div>
-        {canControl && queue.length > 0 && (
-          <span className="row-actions">
+        {canControl && (
+          <div className="queue-heading-actions">
+            <button
+              ref={saveButtonRef}
+              type="button"
+              className="small queue-save-button"
+              title="Save the current song and queue as a playlist"
+              aria-expanded={saveFormOpen}
+              aria-controls={saveFormId}
+              disabled={totalSongs === 0}
+              onClick={() => {
+                setSavedMessage(null);
+                setSaveFormOpen(true);
+              }}
+            >
+              Save as playlist
+            </button>
             {queue.length > 1 && (
               <button type="button" className="small" disabled={pending} onClick={() => run(() => api.shuffleQueue(guildId))}>
                 Shuffle
               </button>
             )}
-            <button type="button" className="small" disabled={pending} onClick={clear}>
-              Clear
-            </button>
-          </span>
+            {queue.length > 0 && (
+              <button type="button" className="small" disabled={pending} onClick={clear}>
+                Clear
+              </button>
+            )}
+          </div>
         )}
       </div>
 
+      {canControl && saveFormOpen && (
+        <SaveQueuePlaylist
+          id={saveFormId}
+          guildId={guildId}
+          songCount={totalSongs}
+          hasCurrentTrack={hasCurrentTrack}
+          onCancel={closeSaveForm}
+          onSaved={(playlist) => {
+            setSavedMessage(`Saved “${playlist.name}” with ${playlist.songCount} ${playlist.songCount === 1 ? "song" : "songs"}. Find it on the Playlists tab.`);
+            closeSaveForm();
+          }}
+        />
+      )}
+      {savedMessage && <p className="hint queue-save-status" role="status">{savedMessage}</p>}
       {children}
       {queue.length === 0 && <p className="muted empty-queue">No songs queued. Add a link or pick a saved playlist.</p>}
 

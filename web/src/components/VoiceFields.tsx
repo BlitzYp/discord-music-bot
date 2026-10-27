@@ -43,11 +43,12 @@ export function VoiceFields({ guildId, voices, voiceId, speed, onVoiceChange, on
   return (
     <>
       <Field
+        inputId="announcement-voice"
         label="Voice"
-        hint="The voice for every announcement, from /announce too. Messages aren't translated: with a German or Latvian voice, write them in that language. The bot owner can download more voices on the Admin page."
+        hint="Write messages in the voice's language; they aren't translated. More voices are available from the bot owner."
       >
         <div className="voice-picker">
-          <select value={shownVoiceId} onChange={(event) => onVoiceChange(event.target.value)}>
+          <select id="announcement-voice" value={shownVoiceId} onChange={(event) => onVoiceChange(event.target.value)}>
             {voices.map((voice) => (
               <option key={voice.id} value={voice.id}>
                 {voice.name} ({voice.description})
@@ -61,9 +62,11 @@ export function VoiceFields({ guildId, voices, voiceId, speed, onVoiceChange, on
         {listenError && <p className="hint error-text">{listenError}</p>}
       </Field>
 
-      <Field label="Speaking speed" hint="1× is the voice's normal speed. Listen plays the sample at this speed.">
+      <Field inputId="speaking-speed" label="Speaking speed" hint="1× is normal. Listen previews the selected speed.">
         <label className="speed-input">
           <input
+            id="speaking-speed"
+            className="slider"
             type="range"
             min={SPEECH_SPEED_LIMITS.min}
             max={SPEECH_SPEED_LIMITS.max}

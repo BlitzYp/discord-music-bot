@@ -8,7 +8,6 @@ import {
   SONG_START_WHEN,
   type SongStartWhen,
 } from "../shared";
-import { Field } from "./GuildSettingsForm";
 
 const LABELS: Record<AutoAnnouncementKind, { label: string; hint: string }> = {
   songStart: { label: "Before a song", hint: "Said just before the song starts. A song on repeat is announced once." },
@@ -75,22 +74,39 @@ function AutoAnnouncementField({ kind, announcement, onChange, children }: Field
   const { label, hint } = LABELS[kind];
   const words = AUTO_ANNOUNCEMENT_WORDS[kind].map((word) => `{${word}}`).join(", ");
   return (
-    <Field label={label} hint={`${hint} Words you can use: ${words}.`}>
-      <div className="auto-announcement">
-        <label className="checkbox">
-          <input type="checkbox" checked={announcement.enabled} onChange={(event) => onChange({ enabled: event.target.checked })} />
-          On
+    <div className="auto-announcement">
+      <div className="auto-announcement-heading">
+        <div>
+          <label className="field-label" htmlFor={`announcement-${kind}`}>{label}</label>
+          <p className="muted hint">{hint}</p>
+        </div>
+        <label className="switch">
+          <input
+            id={`announcement-${kind}`}
+            type="checkbox"
+            aria-label={label}
+            checked={announcement.enabled}
+            onChange={(event) => onChange({ enabled: event.target.checked })}
+          />
+          <span aria-hidden="true">{announcement.enabled ? "On" : "Off"}</span>
         </label>
-        <input
-          type="text"
-          aria-label={`${label}: what the bot says`}
-          value={announcement.message}
-          maxLength={MAX_AUTO_ANNOUNCEMENT_MESSAGE_LENGTH}
-          disabled={!announcement.enabled}
-          onChange={(event) => onChange({ message: event.target.value })}
-        />
-        {children}
       </div>
-    </Field>
+      {announcement.enabled && (
+        <div className="auto-announcement-message">
+          <label className="field-label" htmlFor={`message-${kind}`}>Message</label>
+          <textarea
+            id={`message-${kind}`}
+            aria-label={`${label}: what the bot says`}
+            aria-describedby={`words-${kind}`}
+            rows={2}
+            value={announcement.message}
+            maxLength={MAX_AUTO_ANNOUNCEMENT_MESSAGE_LENGTH}
+            onChange={(event) => onChange({ message: event.target.value })}
+          />
+          <p className="muted hint" id={`words-${kind}`}>Filled in automatically: {words}.</p>
+          {children}
+        </div>
+      )}
+    </div>
   );
 }

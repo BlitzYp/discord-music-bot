@@ -221,7 +221,7 @@ function Dashboard({ user, guildId, view, onNavigate }: DashboardProps) {
           )}
           {canControl && <Announce guildId={guildId} announcing={snapshot.announcing} />}
           <div className="player-lists">
-            <QueueList guildId={guildId} queue={snapshot.queue} canControl={canControl}>
+            <QueueList key={guildId} guildId={guildId} queue={snapshot.queue} hasCurrentTrack={snapshot.current !== null} canControl={canControl}>
               {canControl && <AddSong guildId={guildId} />}
             </QueueList>
             <HistoryList guildId={guildId} history={snapshot.history} canControl={canControl} />
