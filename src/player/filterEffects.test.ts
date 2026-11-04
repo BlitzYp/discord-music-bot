@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { AUDIO_FILTERS, FILTER_DESCRIPTIONS, playbackRate, TIMESCALES } from "./filters.js";
+import { AUDIO_FILTERS, FILTER_DESCRIPTIONS, playbackRate, TIMESCALES } from "../shared/filters.js";
 
 describe("daycore", () => {
   it("is one of the effects, with a description for /filter and the website", () => {
