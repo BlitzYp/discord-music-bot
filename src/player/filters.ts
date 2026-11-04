@@ -27,6 +27,13 @@ export async function applyFilter(player: Player, filter: AudioFilter): Promise<
       await filters.toggleVaporwave(speed, pitch, rate);
       break;
     }
+    case "daycore": {
+      // lavalink-client has no plain "set timescale"; its vaporwave toggle sets the timescale to whatever it's
+      // given, so it does daycore too.
+      const { speed, pitch, rate } = TIMESCALES.daycore;
+      await filters.toggleVaporwave(speed, pitch, rate);
+      break;
+    }
     case "bassboost":
       await filters.setEQPreset("BassboostMedium");
       break;

@@ -6,6 +6,7 @@ import type { YoutubeMode } from "../shared/settings.js";
 import type { AudioFilter, LoopMode, PlayerSnapshot, QueueItem, QueuePlacement, Requester } from "../shared/types.js";
 import { fillMessage, shortenForSpeech } from "../tts/messages.js";
 import { deleteSpeechFile } from "../tts/speech.js";
+import { DUCK_SAFETY_MS, duckedVolume } from "./ducking.js";
 import { UserError } from "./errors.js";
 import { applyFilter } from "./filters.js";
 import { normalizationGain } from "./loudness.js";
@@ -126,6 +127,12 @@ export class GuildPlayer {
 
   /** Set while an announcement is being spoken (see `speak()`). */
   private announcement: ActiveAnnouncement | null = null;
+
+  /**
+   * Set while the music is turned down for another bot that's talking (see `setDucked()`): the volume to go back
+   * to, and the timer that ends ducking by itself.
+   */
+  private duck: { volumeBefore: number; safetyTimer: NodeJS.Timeout } | null = null;
 
   /** The playlist-start announcement, said before the next song starts (see `introducePlaylist()`). */
   private playlistIntro: string | null = null;
@@ -354,8 +361,57 @@ export class GuildPlayer {
       throw new UserError(`Volume must be a whole number from 0 to ${MAX_VOLUME}.`);
     }
     const player = this.requireConnected();
-    await player.setVolume(volume);
+    if (this.duck) {
+      // Ducked: remember the new volume for afterwards, and stay quiet until then.
+      this.duck.volumeBefore = volume;
+      await player.setVolume(duckedVolume(volume));
+    } else {
+      await player.setVolume(volume);
+    }
     this.emitPlayerUpdate();
+  }
+
+  /**
+   * Turns the music down while another bot talks (`on`), and back to its volume afterwards.
+   *
+   * It changes the player volume rather than the "volume" filter that normalization uses: Lavalink applies a filter
+   * only after the few seconds of audio it already prepared (see `makeAudibleNow()`), while the player volume
+   * changes right away. Everyone keeps seeing the real volume (`snapshot()` reports `volumeBefore`), and ducking
+   * ends by itself after DUCK_SAFETY_MS in case "back up" never comes.
+   */
+  async setDucked(on: boolean): Promise<void> {
+    const player = this.lavalinkPlayer;
+    if (!player) {
+      this.clearDuck(); // not in voice any more: nothing to turn down or back up
+      return;
+    }
+    if (on && this.duck) {
+      // Still talking: start the safety timer over.
+      clearTimeout(this.duck.safetyTimer);
+      this.duck.safetyTimer = this.startDuckSafetyTimer();
+      return;
+    }
+    if (on) {
+      this.duck = { volumeBefore: player.volume, safetyTimer: this.startDuckSafetyTimer() };
+      await player.setVolume(duckedVolume(this.duck.volumeBefore));
+      return;
+    }
+    if (!this.duck) return;
+    const { volumeBefore } = this.duck;
+    this.clearDuck();
+    await player.setVolume(volumeBefore);
+  }
+
+  private startDuckSafetyTimer(): NodeJS.Timeout {
+    return setTimeout(() => {
+      void this.run(() => this.setDucked(false)).catch((error: unknown) => console.error("[duck] couldn't end ducking:", error));
+    }, DUCK_SAFETY_MS);
+  }
+
+  /** Forgets the duck and stops its timer. The caller puts the volume back, when there's a player to do it on. */
+  private clearDuck(): void {
+    if (this.duck) clearTimeout(this.duck.safetyTimer);
+    this.duck = null;
   }
 
   /** Jumps to a point in the current track, in milliseconds from its start. */
@@ -718,7 +774,8 @@ export class GuildPlayer {
       paused: interrupted ? true : (player?.paused ?? false),
       interrupted: interrupted !== null,
       announcing: this.announcement !== null,
-      volume: interrupted?.volume ?? player?.volume ?? this.manager.settings.guild(this.guildId).defaultVolume,
+      // While ducked, the player volume is turned down for a moment; the volume that counts is the one before.
+      volume: interrupted?.volume ?? this.duck?.volumeBefore ?? player?.volume ?? this.manager.settings.guild(this.guildId).defaultVolume,
       loopMode: this.loopMode,
       filter: this.filter,
       normalizeVolume: this.normalizeVolumeIsOn(),

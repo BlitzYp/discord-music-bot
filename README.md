@@ -50,7 +50,7 @@ His name, avatar and bio are set in the [Discord Developer Portal](https://disco
 | `/volume [percent]` | Shows or sets the volume, 0–150% (100 is normal). Goes back to the server's starting volume when the bot leaves. |
 | `/normalize on\|off` | Volume normalization, like Spotify's "Normalize volume": every song plays at about the same loudness, so a loud song after a quiet one isn't a shock. Stays on for the server (also after restarts) until switched off. Needs ffmpeg. |
 | `/announce <text>` | Says the text in your voice channel (text-to-speech, up to 300 characters). The song pauses while the bot speaks, then carries on from the same spot. The website's Player tab has the same thing: the **Announce** box. Needs Piper (`npm run setup:piper`). |
-| `/filter <effect>` | Adds an audio effect: nightcore, vaporwave, bassboost, 8d, karaoke or soft (`off` removes it). One at a time; it stays on for the next songs until changed or the bot leaves. |
+| `/filter <effect>` | Adds an audio effect: nightcore, daycore (slowed and deeper, the opposite of nightcore), vaporwave, bassboost, 8d, karaoke or soft (`off` removes it). One at a time; it stays on for the next songs until changed or the bot leaves. |
 | `/playlist ...` | This server's saved playlists; see below |
 | `/library ...` | This server's uploaded audio files; see below |
 
@@ -105,6 +105,14 @@ Anything that isn't a link is searched for on YouTube, and the best match is que
 
 Links are played through Lavalink when it can. When it can't (YouTube blocks Lavalink's plugin every now and then, and SoundCloud is broken in Lavalink 4.2.2), the bot downloads the song with [yt-dlp](https://github.com/yt-dlp/yt-dlp) instead. That takes about 10 seconds, so expect a short pause on those songs.
 
+### Jarvis
+
+Jarvis is the AI bot in the same server (`../Keith-AI`). With `INTEGRATION_KEY` set here and the same key in Jarvis's `.env` (`MUSIC_BOT_KEY`), people can ask Jarvis, by voice or in chat, to play, skip, pause or change the volume, ask what's playing, or ask for "something similar". Jarvis also turns Brick's music down to 30% while it talks, and back up after.
+
+- Jarvis acts **as the person who asked**: the DJ role and the "same voice channel" rule apply to them, exactly like on the website. The key can't use the Admin page.
+- Ducking ends by itself after 20 seconds, so the music never stays quiet if Jarvis stops halfway.
+- `/volume` and the website keep showing the real volume while the music is turned down.
+
 ## Setup (Windows)
 
 ### 1. Install the prerequisites
@@ -147,6 +155,7 @@ Copy `.env.example` to `.env` if you don't have one yet, then fill in:
 | `SESSION_SECRET` | A long random string that signs login cookies. Generate one with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
 | `OWNER_ID` | Your own Discord user ID (Developer Mode on → right-click yourself → Copy User ID). You can do everything, everywhere. |
 | `LAVALINK_PASSWORD` | Any long random string. The bot and Lavalink both read it from here. |
+| `INTEGRATION_KEY` (optional) | Lets Jarvis, the AI bot, control the music (see "Jarvis" below). A random string of 32+ characters, made the same way as `SESSION_SECRET`. Put the same one in Jarvis's `.env` as `MUSIC_BOT_KEY`. Leave it empty to switch this off. |
 | `DEV_GUILD_ID` (optional) | Your server's ID (turn on Developer Mode in Discord, right-click the server → Copy Server ID). Slash commands then register only in that server and show up there instantly, but disappear from your other servers until you empty it again. |
 
 `WEB_PORT`, `PUBLIC_URL` and `OAUTH_REDIRECT_URI` can stay as they are while the website runs on your own computer.

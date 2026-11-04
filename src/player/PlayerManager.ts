@@ -272,6 +272,16 @@ export class PlayerManager extends EventEmitter<PlayerManagerEvents> {
     await player.run(() => player.setVolume(volume));
   }
 
+  /**
+   * Turns the music down (or back up) while another bot talks (see GuildPlayer.setDucked). Does nothing when this
+   * server has no player: there's no music to turn down.
+   */
+  async duck(guildId: string, on: boolean): Promise<void> {
+    const player = this.players.get(guildId);
+    if (!player) return;
+    await player.run(() => player.setDucked(on));
+  }
+
   /** Jumps to a point in the current track (milliseconds from its start). */
   async seek(guildId: string, positionMs: number): Promise<void> {
     const player = this.requirePlayer(guildId);

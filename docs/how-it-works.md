@@ -286,6 +286,10 @@ The incoming file is deleted whatever happens (`finally`), and `cleanUp()` empti
 
 **To show something new on the page:** if the information is already in `PlayerSnapshot`, just use it in a component in `web/src/components/`. If not, add it to `PlayerSnapshot` in `src/shared/types.ts`, fill it in `GuildPlayer.snapshot()` (and `PlayerManager.getState()` for servers with no player yet), and the compiler will point at anything else that needs updating.
 
+### Jarvis (bot-to-bot)
+
+Jarvis, the AI bot (`../Keith-AI`), uses the same web API with `INTEGRATION_KEY` instead of a login cookie (`src/web/integration.ts`). `requireUser()` checks for the key and the acting-user headers before the cookie, so every guild route works for Jarvis as the person who asked, with their permissions; `requireOwner()` refuses the key. `POST /guilds/:id/player/duck` (key only) calls `PlayerManager.duck()` → `GuildPlayer.setDucked()`, which turns the player volume down to 30% and remembers the real one in `duck.volumeBefore` (reported by `snapshot()`, changed by `/volume` while ducked) until "back up" or the 20-second safety timer.
+
 ## Settings and the database
 
 Everything the bot remembers lives in one SQLite file, `data/bot.db` (`src/db/database.ts`). `better-sqlite3` is synchronous: a query finishes before the next line runs, so there are no `await`s and no races, and the queries are tiny enough not to hold anything up.

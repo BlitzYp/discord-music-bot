@@ -5,7 +5,7 @@ import { AUDIO_FILTERS, type AudioFilter } from "../../shared/filters.js";
 import { isYoutubePlaylistLink } from "../../shared/playlists.js";
 import { isSpotifyCollectionLink } from "../../shared/spotify.js";
 import type { LoopMode } from "../../shared/types.js";
-import { type GuildAccess, requireGuildAccess } from "../access.js";
+import { type GuildAccess, requireGuildAccess, requireIntegration } from "../access.js";
 import { route } from "../http.js";
 import type { WebContext } from "../server.js";
 
@@ -126,6 +126,19 @@ export function playerRoutes({ client, players, library, settings }: WebContext)
   });
 
   // Volume normalization on or off: { enabled: boolean }. Saved as a server setting.
+  // Jarvis turns the music down while it talks ({ on: true }) and back up ({ on: false }). Integration key only:
+  // it isn't a person's action, and changes nothing anyone sees. Doing nothing when the bot isn't playing.
+  router.post(
+    "/guilds/:id/player/duck",
+    route(async (req: Request, res: Response) => {
+      requireIntegration(req);
+      const on = req.body?.on;
+      if (typeof on !== "boolean") throw new UserError('"on" must be true or false.');
+      await players.duck(req.params.id as string, on);
+      res.json({ ducked: on });
+    }),
+  );
+
   djRoute("post", "/guilds/:id/player/normalize", ({ guild }, req) => {
     const enabled = req.body?.enabled;
     if (typeof enabled !== "boolean") throw new UserError('"enabled" must be true or false.');
