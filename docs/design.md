@@ -246,6 +246,12 @@ POST   /guilds/:id/playlists/from-queue               (dj) { name }
   - **When someone joins / leaves the bot's voice channel** (`{name}`): people who join (or leave) within 3 seconds of each other are named together ("Welcome, Ann and Bob!"); the same person isn't announced again within a minute; no goodbye to an empty channel; bots are ignored. Skipped while another announcement is being said, so they don't pile up.
   - If Piper fails, the song plays anyway and the reason is logged.
 
+## Jarvis integration (added at the owner's request)
+- **What:** Jarvis, the owner's AI bot (`../Keith-AI`), controls playback for people who ask it to, reads what's playing, and turns the music down ("ducks" it) while it talks.
+- **Auth: a shared key, acting as a person.** Jarvis sends `Authorization: Bearer <INTEGRATION_KEY>` plus `X-Acting-User-Id` / `X-Acting-User-Name` (URI-encoded). `requireUser()` treats that as the named person, so `requireGuildAccess()`, the DJ role and the same-voice-channel rule apply to them unchanged: the key never gives more than the person has. Chosen over a separate "bot" permission level, which would have needed its own rules and let Jarvis act for people who couldn't. The key is compared in constant time (`src/web/integration.ts`).
+- **No admin access:** `requireOwner()` refuses the key even when acting as `OWNER_ID`, because the website is reachable from the internet through Funnel and the key sits in a second `.env`.
+- **Ducking:** `POST /api/guilds/:id/player/duck { on }`, key only (it isn't a person's action and changes nothing anyone sees). It lowers the **player volume** to 30%, not the volume filter normalization uses: filters only take effect after the audio Lavalink already prepared (or a seek, which would glitch every time Jarvis talks), while the player volume changes at once. `snapshot()` reports the volume from before, `/volume` while ducked changes that remembered volume, and ducking ends by itself after 20 s (`DUCK_SAFETY_MS`); Jarvis repeats "duck" every 10 s while it keeps talking.
+
 ## Real-time (Socket.IO, built in milestone 4)
 - The client sends `guild:watch <id>` and joins the room `guild:<id>`. From milestone 5, the server first checks that the logged-in user is a member of that server.
 - Server → client: `state` (full snapshot on join), `queue:update`, `track:start`, `track:end`, `player:update` (position, paused, volume, loop mode, filter; about once per second while playing), `error`, `playlists:update` (milestone 7), `library:update` (milestone 8). The types live in `src/shared/types.ts`.
@@ -266,7 +272,7 @@ The bot's Discord status says what it's doing, summed up over all servers (a bot
 ### Slash commands
 `/play <song name|url> [playlist] [next]` · `/play file:<attachment> [next]` · `/playlist …` (see "Playlists") · `/skip` · `/stop` · `/pause` · `/resume` · `/queue` · `/nowplaying` · `/remove <pos>` · `/move <from> <to>` · `/playnow <pos>` · `/shuffle` · `/loop off|track|queue` · `/volume <0-150>` · `/filter <effect>` · `/normalize on|off` · `/announce <text>` · `/seek <time>` · `/library list|play|upload|delete` · `/dashboard` (link to the website)
 
-`/filter` (added alongside milestone 3, at the owner's request) uses Lavalink's built-in filters: nightcore, vaporwave, bassboost, 8d, karaoke, soft, or off. One effect at a time, kept on the player until changed. The website offers the same list (`AUDIO_FILTERS` in `src/shared/filters.ts`) through `POST /guilds/:id/player/filter { filter }`, which needs DJ permission from milestone 5.
+`/filter` (added alongside milestone 3, at the owner's request) uses Lavalink's built-in filters: nightcore, daycore, vaporwave, bassboost, 8d, karaoke, soft, or off. Daycore (added later, at the owner's request) is nightcore's opposite: tempo and pitch both at 0.8×, like a slowed-down record; vaporwave lowers the pitch more than the tempo. One effect at a time, kept on the player until changed. The website offers the same list (`AUDIO_FILTERS` in `src/shared/filters.ts`) through `POST /guilds/:id/player/filter { filter }`, which needs DJ permission from milestone 5.
 
 ### REST API (under `/api`, login required unless noted)
 Built in milestone 5 (member = any member of that server, dj = may control playback):

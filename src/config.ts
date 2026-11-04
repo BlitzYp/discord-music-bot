@@ -25,6 +25,13 @@ const schema = z
     LAVALINK_PORT: z.coerce.number().int().positive().default(2333),
     LAVALINK_PASSWORD: required("LAVALINK_PASSWORD"),
     DEV_GUILD_ID: optional,
+    /**
+     * A shared secret that lets Jarvis (the AI bot, ../Keith-AI) use the web API on behalf of the person talking to
+     * it. Unset = off. See src/web/integration.ts.
+     */
+    INTEGRATION_KEY: optional.refine((key) => key === undefined || key.length >= 32, {
+      message: "INTEGRATION_KEY must be a random string of at least 32 characters (see the README)",
+    }),
   })
   .transform((env) => {
     const publicUrl = (env.PUBLIC_URL ?? `http://localhost:${env.WEB_PORT}`).replace(/\/$/, "");

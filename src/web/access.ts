@@ -4,18 +4,33 @@ import { config } from "../config.js";
 import { getPermissionLevel, hasLevel, LEVEL_NAMES, type PermissionLevel, voiceChannelProblem } from "../permissions.js";
 import type { SessionUser } from "../shared/types.js";
 import { HttpError } from "./http.js";
+import { integrationKeyMatches, integrationUserOf } from "./integration.js";
 import type { WebContext } from "./server.js";
 import { sessionUserOf } from "./session.js";
 
-/** The logged-in user. Throws 401 if nobody is logged in. */
+/**
+ * The logged-in user, or the person Jarvis is acting for (integration key + acting-user headers, see
+ * integration.ts). Throws 401 if it's neither.
+ */
 export function requireUser(req: Request): SessionUser {
-  const user = sessionUserOf(req);
+  const user = integrationUserOf(req.headers, config.INTEGRATION_KEY) ?? sessionUserOf(req);
   if (!user) throw new HttpError(401, "Log in with Discord first.");
   return user;
 }
 
+/** Throws 401 unless the request carries the integration key. For routes only Jarvis calls, like ducking. */
+export function requireIntegration(req: Request): void {
+  if (!integrationKeyMatches(req.headers.authorization, config.INTEGRATION_KEY)) {
+    throw new HttpError(401, "This needs the integration key.");
+  }
+}
+
 /** The logged-in user, if they're the bot owner (OWNER_ID). Throws 401 or 403 otherwise. Every /admin route starts with this. */
 export function requireOwner(req: Request): SessionUser {
+  // The admin pages are for the owner in a browser, never for the integration key, even acting as the owner.
+  if (integrationKeyMatches(req.headers.authorization, config.INTEGRATION_KEY)) {
+    throw new HttpError(403, "The integration key can't use the admin pages.");
+  }
   const user = requireUser(req);
   if (!isOwner(user.id)) throw new HttpError(403, "Only the bot owner can do that.");
   return user;
